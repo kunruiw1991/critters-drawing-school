@@ -458,6 +458,43 @@
     .btn-next {
       background: linear-gradient(180deg, #9775FA 0%, #5F3DC4 100%);
     }
+
+    @media (max-width: 900px), (orientation: portrait) {
+      .app-shell {
+        grid-template-rows: auto 1fr auto;
+        padding: 6px;
+        gap: 6px;
+      }
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 6px;
+      }
+      .step-ladder {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .ladder-step {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .swatch-grid {
+        grid-template-columns: repeat(6, 1fr);
+      }
+      .tool-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .bottom-bar {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .big-kid-btn {
+        min-width: 100px;
+        min-height: 52px;
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
 <body>

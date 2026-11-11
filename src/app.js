@@ -55,7 +55,7 @@ function addEllipseSubpath(ctx, cx, cy, rx, ry, rot = 0) {
 function buildPartClipPath(ctx, lesson, partId) {
   ctx.beginPath();
   if (partId === 'background_frame') {
-    ctx.rect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.roundRect(22, 22, CANVAS_W - 44, CANVAS_H - 44, 20);
     return;
   }
   if (partId === 'main_fur') {
@@ -171,8 +171,39 @@ export function initDrawingSchoolApp() {
     pointerDown: false,
     lastPt: null,
     lastDabPt: null,
+    paintedCells: new Set(),
+    strokeTargetDist: 0, // furthest arc-length (px) the child's finger has traced along the active stroke
     subtitleText: SUBTITLE_TEXTS.welcome,
   };
+
+  // Area-based coloring coverage: a coarse grid of cells whose centers lie inside the active part.
+  const COVER_CELL = 14;
+  const coverageGridCache = {};
+  function getCoverageGrid(partId) {
+    const lesson = getLesson();
+    const key = `${lesson.id}:${partId}`;
+    if (coverageGridCache[key]) return coverageGridCache[key];
+    const c = document.createElement('canvas');
+    c.width = CANVAS_W;
+    c.height = CANVAS_H;
+    const g = c.getContext('2d');
+    buildPartClipPath(g, lesson, partId);
+    const cells = [];
+    for (let cy = COVER_CELL / 2; cy < CANVAS_H; cy += COVER_CELL) {
+      for (let cx = COVER_CELL / 2; cx < CANVAS_W; cx += COVER_CELL) {
+        if (g.isPointInPath(cx, cy)) cells.push([cx, cy]);
+      }
+    }
+    coverageGridCache[key] = cells;
+    return cells;
+  }
+  function brushRadius(tool, partId) {
+    if (partId === 'background_frame') return 48;
+    return tool === 'watercolor' ? 42 : tool === 'glitter' ? 30 : tool === 'marker' ? 32 : 26;
+  }
+  function coverageGoal(partId) {
+    return partId === 'background_frame' ? 25 : 80;
+  }
 
   function resetTeacherDemo() {
     state.teacherPhase = 0;
@@ -346,6 +377,7 @@ export function initDrawingSchoolApp() {
     state.drawStepIndex = 0;
     state.strokeSubIndex = 0;
     state.strokeProgress = 0;
+    state.strokeTargetDist = 0;
     state.colorStepIndex = 0;
     state.colorCoverage = 0;
     state.selectedColor = found.palette.base;
@@ -372,6 +404,7 @@ export function initDrawingSchoolApp() {
     if (state.strokeSubIndex + 1 < ds.strokes.length) {
       state.strokeSubIndex += 1;
       state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
       resetTeacherDemo();
       syncUI();
       return;
@@ -382,6 +415,7 @@ export function initDrawingSchoolApp() {
       state.drawStepIndex += 1;
       state.strokeSubIndex = 0;
       state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
       resetTeacherDemo();
       const nextDs = lesson.drawSteps[state.drawStepIndex];
       audio.speak(nextDs.voiceId, setSubtitle);
@@ -389,9 +423,13 @@ export function initDrawingSchoolApp() {
     } else {
       // Transition to Phase 2: Step-by-Step Part-by-Part Coloring!
       state.phase = 'coloring';
+      state.strokeSubIndex = 0;
+      state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
       state.colorStepIndex = 0;
       state.colorCoverage = 0;
       state.lastDabPt = null;
+      state.paintedCells = new Set();
       resetTeacherDemo();
       const firstCs = lesson.colorSteps[0];
       state.selectedColor = firstCs.recommendedColor;
@@ -409,8 +447,10 @@ export function initDrawingSchoolApp() {
     const pCtx = pCanvas.getContext('2d');
     pCtx.save();
     pCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    buildPartClipPath(pCtx, lesson, partId);
-    pCtx.clip();
+    if (partId !== 'background_frame') {
+      buildPartClipPath(pCtx, lesson, partId);
+      pCtx.clip();
+    }
 
     if (partId === 'background_frame') {
       const grad = pCtx.createLinearGradient(0, 0, 0, CANVAS_H);
@@ -458,6 +498,7 @@ export function initDrawingSchoolApp() {
       state.colorStepIndex += 1;
       state.colorCoverage = 0;
       state.lastDabPt = null;
+      state.paintedCells = new Set();
       resetTeacherDemo();
       const nextCs = lesson.colorSteps[state.colorStepIndex];
       state.selectedColor = nextCs.recommendedColor;
@@ -536,14 +577,23 @@ export function initDrawingSchoolApp() {
     }
     pCtx.restore();
 
-    state.colorCoverage = Math.min(100, state.colorCoverage + 1.8);
+    // Coverage = share of the active part's own grid cells actually under the brush;
+    // scribbles outside the lines touch zero part cells and therefore never count.
+    const cells = getCoverageGrid(cs.partId);
+    const r2 = brushRadius(state.selectedTool, cs.partId) ** 2;
+    for (let i = 0; i < cells.length; i++) {
+      const dx = cells[i][0] - x;
+      const dy = cells[i][1] - y;
+      if (dx * dx + dy * dy <= r2) state.paintedCells.add(i);
+    }
+    state.colorCoverage = Math.min(100, (100 * state.paintedCells.size) / Math.max(1, cells.length));
     if (Math.random() < 0.35) {
       audio.playTraceTick();
       spawnSparkles(x, y, color, 2);
     }
     syncUI();
 
-    if (state.colorCoverage >= 85) {
+    if (state.colorCoverage >= coverageGoal(cs.partId)) {
       state.pointerDown = false;
       state.lastDabPt = null;
       advanceColoringStep();
@@ -557,40 +607,34 @@ export function initDrawingSchoolApp() {
       if (!ds) return;
       const pts = ds.strokes[state.strokeSubIndex];
       if (!pts || pts.length < 2) return;
-
-      const nowPerf = performance.now();
-      const pointerDt = state.lastPointerMs > 0
-        ? Math.min(0.08, Math.max(0.004, (nowPerf - state.lastPointerMs) / 1000))
-        : 0.016;
-      state.lastPointerMs = nowPerf;
-
-      const pointerDeltaPx = state.lastPt
-        ? Math.hypot(x - state.lastPt.x, y - state.lastPt.y)
-        : 0;
-      if (pointerDeltaPx < 1.2) return;
-
-      const targetPt = samplePointOnPolyline(pts, state.strokeProgress);
-      const dist = Math.hypot(x - targetPt[0], y - targetPt[1]);
-
-      // Only advance when pointer is within forgiving distance of the current stroke tip,
-      // and clamp advancement strictly to 5-year-old hand speed (<= 38 px/sec along true arc-length)!
-      if (dist <= 155) {
-        const totalArcLen = Math.max(220, getPolylineTotalLength(pts));
-        const maxPxThisEvent = Math.min(pointerDeltaPx, 38 * pointerDt);
-        const stepIncrement = maxPxThisEvent / totalArcLen;
-        state.strokeProgress = Math.min(1, state.strokeProgress + stepIncrement);
-        const sparkPt = samplePointOnPolyline(pts, state.strokeProgress);
-        if (Math.random() < 0.28) {
-          audio.playTraceTick();
-          spawnSparkles(sparkPt[0], sparkPt[1], '#FFD43B', 2);
+      // The finger only sets a TARGET along the stroke (projection inside a forward window);
+      // the ink itself crawls toward it at <= 38 px/s in renderEasel, so it can never rocket,
+      // never stalls when a child traces faster, and rubbing in place does not advance it.
+      const cum = getPolylineArcLengths(pts);
+      const total = cum[cum.length - 1] || 1;
+      const reached = Math.max(state.strokeProgress * total, state.strokeTargetDist);
+      const lo = Math.max(0, reached - 24);
+      const hi = Math.min(total, reached + 160);
+      let bestD = -1;
+      let bestGap = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (cum[i + 1] < lo || cum[i] > hi) continue;
+        const ax = pts[i][0];
+        const ay = pts[i][1];
+        const vx = pts[i + 1][0] - ax;
+        const vy = pts[i + 1][1] - ay;
+        const l2 = vx * vx + vy * vy || 1e-9;
+        const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2));
+        const d = cum[i] + t * (cum[i + 1] - cum[i]);
+        if (d < lo || d > hi) continue;
+        const gap = Math.hypot(ax + vx * t - x, ay + vy * t - y);
+        if (gap < bestGap) {
+          bestGap = gap;
+          bestD = d;
         }
-        syncUI();
-
-        if (state.strokeProgress >= 0.97) {
-          state.pointerDown = false;
-          state.lastPointerMs = 0;
-          advanceDrawingSubStroke();
-        }
+      }
+      if (bestD >= 0 && bestGap <= 70) {
+        state.strokeTargetDist = Math.max(state.strokeTargetDist, bestD);
       }
     } else if (state.phase === 'coloring') {
       paintBrushDab(x, y);
@@ -628,6 +672,8 @@ export function initDrawingSchoolApp() {
       state.drawStepIndex = Math.max(0, Math.min(lesson.drawSteps.length - 1, stepIdx));
       state.strokeSubIndex = 0;
       state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
+      state.colorCoverage = 0;
       resetTeacherDemo();
       audio.speak(lesson.drawSteps[state.drawStepIndex].voiceId, setSubtitle);
       syncUI();
@@ -643,6 +689,11 @@ export function initDrawingSchoolApp() {
       }
       state.colorStepIndex = clampedIdx;
       state.colorCoverage = 0;
+      state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
+      state.lastDabPt = null;
+      state.paintedCells = new Set();
+      resetTeacherDemo();
       const curCs = lesson.colorSteps[clampedIdx];
       state.selectedColor = curCs.recommendedColor;
       state.selectedTool = curCs.defaultTool;
@@ -771,7 +822,10 @@ export function initDrawingSchoolApp() {
     const lesson = getLesson();
 
     // True 5-year-old child slow demonstration speed (~28 px/sec along true pixel arc-length, min 12.0s pass!)
-    if (state.pointerDown || state.strokeProgress > 0 || state.colorCoverage > 0) {
+    const childActive = state.pointerDown ||
+      (state.phase === 'drawing' && state.strokeProgress > 0) ||
+      (state.phase === 'coloring' && state.colorCoverage > 0);
+    if (childActive) {
       state.teacherDemoDone = true;
     } else if (!state.teacherDemoDone) {
       if (state.teacherHoldTimer > 0) {
@@ -782,10 +836,10 @@ export function initDrawingSchoolApp() {
           const ds = lesson.drawSteps[state.drawStepIndex];
           const activePts = ds?.strokes?.[state.strokeSubIndex];
           const arcPx = getPolylineTotalLength(activePts);
-          // 28 px/sec with a minimum 12.0s duration so even small strokes move at a gentle 5-year-old pace
-          demoDurationSec = Math.max(12.0, arcPx / Math.max(15, state.teacherSpeedPxPerSec));
+          // 28 px/sec along true Euclidean arc-length (756.9px head takes 27.07s; tiny 9px sun rays take 3.5s)
+          demoDurationSec = Math.max(3.5, arcPx / Math.max(15, state.teacherSpeedPxPerSec));
         } else if (state.phase === 'coloring') {
-          demoDurationSec = 12.0;
+          demoDurationSec = 10.0;
         }
         state.teacherPhase += dt / demoDurationSec;
         if (state.teacherPhase >= 1.0) {
@@ -795,6 +849,35 @@ export function initDrawingSchoolApp() {
       }
     }
     state.danceTime += dt;
+
+    // Child ink follows the finger's traced target at a steady 5-year-old pace (<= 38 px/s).
+    if (state.phase === 'drawing') {
+      const dsA = lesson.drawSteps[state.drawStepIndex];
+      const ptsA = dsA?.strokes?.[state.strokeSubIndex];
+      const totalA = getPolylineTotalLength(ptsA);
+      if (totalA > 0) {
+        const tipA = state.strokeProgress * totalA;
+        if (state.strokeTargetDist > tipA + 0.01) {
+          const nextA = Math.min(state.strokeTargetDist, tipA + 38 * dt);
+          state.strokeProgress = Math.min(1, nextA / totalA);
+          const meterFill = document.getElementById('step-meter-fill');
+          const meterLabel = document.getElementById('step-meter-label');
+          const pctA = Math.min(100, Math.round(((state.strokeSubIndex + state.strokeProgress) / dsA.strokes.length) * 100));
+          if (meterFill) meterFill.style.width = `${pctA}%`;
+          if (meterLabel) meterLabel.textContent = `${pctA}% Traced`;
+          if (Math.random() < 0.06) {
+            const sparkA = samplePointOnPolyline(ptsA, state.strokeProgress);
+            audio.playTraceTick();
+            spawnSparkles(sparkA[0], sparkA[1], '#FFD43B', 2);
+          }
+          if (state.strokeProgress >= 0.985) {
+            state.pointerDown = false;
+            advanceDrawingSubStroke();
+          }
+        }
+      }
+    }
+
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
     // Cream sketchbook paper background with subtle notebook grid
@@ -937,7 +1020,18 @@ export function initDrawingSchoolApp() {
           const startPt = activePts[0];
           const endPt = activePts[activePts.length - 1];
 
-          // Green START dot
+          // Gold FINISH dot drawn first so Green START dot always sits on top on closed loops
+          ctx.fillStyle = '#F59F00';
+          ctx.beginPath();
+          ctx.arc(endPt[0], endPt[1], 13, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('★', endPt[0], endPt[1]);
+
+          // Green START dot (drawn on top of FINISH dot when startPt == endPt)
           ctx.fillStyle = '#2B8A3E';
           ctx.beginPath();
           ctx.arc(startPt[0], startPt[1], 14, 0, Math.PI * 2);
@@ -947,14 +1041,6 @@ export function initDrawingSchoolApp() {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('START', startPt[0], startPt[1]);
-
-          // Gold FINISH dot
-          ctx.fillStyle = '#F59F00';
-          ctx.beginPath();
-          ctx.arc(endPt[0], endPt[1], 13, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillText('★', endPt[0], endPt[1]);
 
           // Teacher pencil: glides at constant 5-year-old speed (28 px/sec) ONCE during !teacherDemoDone, then parks calmly at child's stroke tip (or START)
           const pencilRatio = !state.teacherDemoDone ? linearDemoT : state.strokeProgress;
@@ -987,9 +1073,35 @@ export function initDrawingSchoolApp() {
 
         if (!state.teacherDemoDone && state.colorCoverage === 0) {
           const demoT = Math.max(0, Math.min(1, state.teacherPhase));
-          const sweepX = target.x + Math.sin(demoT * Math.PI * 2.5) * 42;
-          const sweepY = target.y + (demoT - 0.5) * 40;
-          renderTeacherPencil(ctx, sweepX, sweepY);
+          const partCells = getCoverageGrid(cs.partId);
+          let demoWaypoints = [];
+          if (partCells.length >= 6) {
+            const wpCount = 7;
+            for (let w = 0; w < wpCount; w++) {
+              const idx = Math.min(
+                partCells.length - 1,
+                Math.floor(((w + 0.5) / wpCount) * partCells.length)
+              );
+              demoWaypoints.push(partCells[idx]);
+            }
+          } else {
+            demoWaypoints = [
+              [target.x - 36, target.y - 16],
+              [target.x + 36, target.y],
+              [target.x - 24, target.y + 18],
+              [target.x + 28, target.y + 16],
+            ];
+          }
+          ctx.save();
+          buildPartClipPath(ctx, lesson, cs.partId);
+          ctx.clip();
+          drawStrokePolyline(ctx, demoWaypoints, demoT, {
+            color: cs.recommendedColor || state.selectedColor || '#FFD43B',
+            width: 24,
+          });
+          ctx.restore();
+          const sweepPt = samplePointOnPolyline(demoWaypoints, demoT);
+          renderTeacherPencil(ctx, sweepPt[0], sweepPt[1]);
         }
       }
     }
@@ -1080,7 +1192,10 @@ export function initDrawingSchoolApp() {
   const btnVoiceReplay = document.getElementById('btn-voice-replay');
   if (btnVoiceReplay) {
     btnVoiceReplay.addEventListener('click', () => {
-      if (state.phase === 'drawing' && state.strokeProgress === 0) {
+      if (
+        (state.phase === 'drawing' && state.strokeProgress === 0) ||
+        (state.phase === 'coloring' && state.colorCoverage === 0)
+      ) {
         resetTeacherDemo();
       }
       audio.replayLast(setSubtitle);
@@ -1108,6 +1223,7 @@ export function initDrawingSchoolApp() {
 
   canvas.addEventListener('pointerdown', (e) => {
     state.pointerDown = true;
+    state.lastPointerMs = performance.now();
     const pt = toCanvasCoords(e);
     state.lastPt = pt;
     handlePointerMoveOnEasel(pt.x, pt.y);
@@ -1116,8 +1232,8 @@ export function initDrawingSchoolApp() {
   window.addEventListener('pointermove', (e) => {
     if (!state.pointerDown) return;
     const pt = toCanvasCoords(e);
-    handlePointerMoveOnEasel(pt.x, pt.y);
-    state.lastPt = pt;
+    const consumed = handlePointerMoveOnEasel(pt.x, pt.y);
+    if (consumed !== false) state.lastPt = pt;
   });
 
   window.addEventListener('pointerup', () => {
@@ -1165,6 +1281,12 @@ export function initDrawingSchoolApp() {
       return this.getState();
     },
     replayVoice() {
+      if (
+        (state.phase === 'drawing' && state.strokeProgress === 0) ||
+        (state.phase === 'coloring' && state.colorCoverage === 0)
+      ) {
+        resetTeacherDemo();
+      }
       audio.replayLast(setSubtitle);
       return this.getState();
     },
