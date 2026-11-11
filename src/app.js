@@ -162,11 +162,17 @@ export function initDrawingSchoolApp() {
     stickers: [],
     sparkles: [],
     teacherPhase: 0,
+    teacherDemoDone: false,
     danceTime: 0,
     pointerDown: false,
     lastPt: null,
     subtitleText: SUBTITLE_TEXTS.welcome,
   };
+
+  function resetTeacherDemo() {
+    state.teacherPhase = 0;
+    state.teacherDemoDone = false;
+  }
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -338,6 +344,7 @@ export function initDrawingSchoolApp() {
     state.colorCoverage = 0;
     state.selectedColor = found.palette.base;
     state.selectedTool = 'crayon';
+    resetTeacherDemo();
     clearPartCanvases();
     syncUI();
     if (!quiet) {
@@ -359,6 +366,7 @@ export function initDrawingSchoolApp() {
     if (state.strokeSubIndex + 1 < ds.strokes.length) {
       state.strokeSubIndex += 1;
       state.strokeProgress = 0;
+      resetTeacherDemo();
       syncUI();
       return;
     }
@@ -368,6 +376,7 @@ export function initDrawingSchoolApp() {
       state.drawStepIndex += 1;
       state.strokeSubIndex = 0;
       state.strokeProgress = 0;
+      resetTeacherDemo();
       const nextDs = lesson.drawSteps[state.drawStepIndex];
       audio.speak(nextDs.voiceId, setSubtitle);
       syncUI();
@@ -585,6 +594,7 @@ export function initDrawingSchoolApp() {
       state.drawStepIndex = Math.max(0, Math.min(lesson.drawSteps.length - 1, stepIdx));
       state.strokeSubIndex = 0;
       state.strokeProgress = 0;
+      resetTeacherDemo();
       audio.speak(lesson.drawSteps[state.drawStepIndex].voiceId, setSubtitle);
       syncUI();
       return;
@@ -618,14 +628,37 @@ export function initDrawingSchoolApp() {
     }
   }
 
+  function samplePointOnPolyline(pts, ratio = 0) {
+    if (!pts || pts.length === 0) return [400, 320];
+    if (pts.length === 1) return pts[0];
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const exact = clamped * (pts.length - 1);
+    const baseIdx = Math.min(pts.length - 1, Math.floor(exact));
+    const frac = exact - baseIdx;
+    if (frac <= 0 || baseIdx + 1 >= pts.length) {
+      return pts[baseIdx];
+    }
+    const p0 = pts[baseIdx];
+    const p1 = pts[baseIdx + 1];
+    return [p0[0] + (p1[0] - p0[0]) * frac, p0[1] + (p1[1] - p0[1]) * frac];
+  }
+
   function drawStrokePolyline(targetCtx, pts, ratio = 1.0, style = {}) {
     if (!pts || pts.length < 2 || ratio <= 0) return;
-    const maxIdx = Math.max(1, Math.floor((pts.length - 1) * Math.min(1, ratio)));
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const exact = clamped * (pts.length - 1);
+    const baseIdx = Math.floor(exact);
+    const frac = exact - baseIdx;
     targetCtx.save();
     targetCtx.beginPath();
     targetCtx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i <= maxIdx; i++) {
+    for (let i = 1; i <= baseIdx; i++) {
       targetCtx.lineTo(pts[i][0], pts[i][1]);
+    }
+    if (frac > 0 && baseIdx + 1 < pts.length) {
+      const p0 = pts[baseIdx];
+      const p1 = pts[baseIdx + 1];
+      targetCtx.lineTo(p0[0] + (p1[0] - p0[0]) * frac, p0[1] + (p1[1] - p0[1]) * frac);
     }
     targetCtx.strokeStyle = style.color || '#3B2314';
     targetCtx.lineWidth = style.width || 7;
@@ -667,7 +700,16 @@ export function initDrawingSchoolApp() {
 
   function renderEasel(nowMs) {
     const dt = 1 / 60;
-    state.teacherPhase = (state.teacherPhase + dt * 0.55) % 1;
+    // Calm, steady ONE-TIME demonstration (~4.0s duration, no repeating loop)
+    if (state.pointerDown || state.strokeProgress > 0) {
+      state.teacherDemoDone = true;
+    } else if (!state.teacherDemoDone) {
+      state.teacherPhase += dt * 0.25;
+      if (state.teacherPhase >= 1.0) {
+        state.teacherPhase = 1.0;
+        state.teacherDemoDone = true;
+      }
+    }
     state.danceTime += dt;
 
     const lesson = getLesson();
@@ -716,21 +758,21 @@ export function initDrawingSchoolApp() {
       }
     }
 
-    // 2. If in Coloring Phase, draw a pulsing spotlight outline around the ACTIVE part
+    // 2. If in Coloring Phase, draw a calm spotlight outline around the ACTIVE part
     if (state.phase === 'coloring') {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
         ctx.save();
         buildPartClipPath(ctx, lesson, cs.partId);
         ctx.strokeStyle = cs.recommendedColor || '#FFD43B';
-        ctx.lineWidth = 14 + Math.sin(state.danceTime * 6) * 4;
-        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 14;
+        ctx.globalAlpha = 0.28 + Math.sin(state.danceTime * 2.2) * 0.08;
         ctx.stroke();
         ctx.setLineDash([14, 10]);
-        ctx.lineDashOffset = -state.danceTime * 40;
+        ctx.lineDashOffset = 0;
         ctx.strokeStyle = '#FFD43B';
         ctx.lineWidth = 5;
-        ctx.globalAlpha = 0.95;
+        ctx.globalAlpha = 0.92;
         ctx.stroke();
         ctx.restore();
       }
@@ -790,11 +832,22 @@ export function initDrawingSchoolApp() {
         const activePts = ds.strokes[state.strokeSubIndex];
         if (activePts && activePts.length >= 2) {
           drawStrokePolyline(ctx, activePts, 1.0, {
-            color: 'rgba(112, 72, 232, 0.55)',
+            color: 'rgba(112, 72, 232, 0.50)',
             width: 11,
             dash: [16, 12],
-            dashOffset: -state.danceTime * 45,
+            dashOffset: 0,
           });
+
+          // During the ONE-TIME steady demonstration pass, show a soft preview trail
+          const rawT = Math.max(0, Math.min(1, state.teacherPhase));
+          const easedDemoT = rawT * rawT * (3 - 2 * rawT);
+          if (!state.teacherDemoDone && state.strokeProgress === 0) {
+            drawStrokePolyline(ctx, activePts, easedDemoT, {
+              color: 'rgba(255, 146, 43, 0.45)',
+              width: 9,
+            });
+          }
+
           drawStrokePolyline(ctx, activePts, state.strokeProgress, {
             color: '#3B2314',
             width: 8,
@@ -822,13 +875,10 @@ export function initDrawingSchoolApp() {
           ctx.fillStyle = '#FFFFFF';
           ctx.fillText('★', endPt[0], endPt[1]);
 
-          // Floating teacher demo pencil along the active stroke
-          const demoIdx = Math.min(
-            activePts.length - 1,
-            Math.floor(state.teacherPhase * (activePts.length - 1))
-          );
-          const demoPt = activePts[demoIdx];
-          renderTeacherPencil(ctx, demoPt[0], demoPt[1]);
+          // Teacher pencil: glides smoothly ONCE during !teacherDemoDone, then parks calmly at child's stroke tip (or START)
+          const pencilRatio = !state.teacherDemoDone ? easedDemoT : state.strokeProgress;
+          const pencilPt = samplePointOnPolyline(activePts, pencilRatio);
+          renderTeacherPencil(ctx, pencilPt[0], pencilPt[1]);
         }
       }
     }
@@ -838,7 +888,7 @@ export function initDrawingSchoolApp() {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
         const target = getPartTargetCenter(cs.partId);
-        const bobY = Math.sin(state.danceTime * 5) * 6;
+        const bobY = Math.sin(state.danceTime * 1.8) * 2.5;
         ctx.save();
         ctx.fillStyle = 'rgba(33, 24, 60, 0.86)';
         ctx.beginPath();
@@ -941,7 +991,12 @@ export function initDrawingSchoolApp() {
 
   const btnVoiceReplay = document.getElementById('btn-voice-replay');
   if (btnVoiceReplay) {
-    btnVoiceReplay.addEventListener('click', () => audio.replayLast(setSubtitle));
+    btnVoiceReplay.addEventListener('click', () => {
+      if (state.phase === 'drawing' && state.strokeProgress === 0) {
+        resetTeacherDemo();
+      }
+      audio.replayLast(setSubtitle);
+    });
   }
 
   const btnNextChar = document.getElementById('btn-next-char');
@@ -993,6 +1048,8 @@ export function initDrawingSchoolApp() {
         drawStepCount: lesson.drawSteps.length,
         strokeSubIndex: state.strokeSubIndex,
         strokeProgress: state.strokeProgress,
+        teacherPhase: state.teacherPhase,
+        teacherDemoDone: state.teacherDemoDone,
         colorStepIndex: state.colorStepIndex,
         colorStepCount: lesson.colorSteps.length,
         currentColorPartId: lesson.colorSteps[state.colorStepIndex]?.partId || null,
