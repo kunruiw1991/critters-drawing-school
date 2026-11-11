@@ -1,0 +1,135 @@
+{
+  "voice": "en-US-AnaNeural",
+  "clips": {
+    "welcome": {
+      "file": "assets/voice/welcome.mp3",
+      "text": "Welcome to Smiling Critters Drawing and Coloring School! Pick a friend to draw step by step!",
+      "bytes": 44784
+    },
+    "draw_step_1": {
+      "file": "assets/voice/draw_step_1.mp3",
+      "text": "Drawing Step 1! Trace along the green dot to draw the big round head!",
+      "bytes": 37584
+    },
+    "draw_step_2": {
+      "file": "assets/voice/draw_step_2.mp3",
+      "text": "Drawing Step 2! Awesome! Now trace the cute ears on top of the head!",
+      "bytes": 43056
+    },
+    "draw_step_3": {
+      "file": "assets/voice/draw_step_3.mp3",
+      "text": "Drawing Step 3! Let's draw the two big eyes and the cute little nose in the middle!",
+      "bytes": 41040
+    },
+    "draw_step_4": {
+      "file": "assets/voice/draw_step_4.mp3",
+      "text": "Drawing Step 4! Draw a giant happy Smiling Critter grin from cheek to cheek!",
+      "bytes": 41760
+    },
+    "draw_step_5": {
+      "file": "assets/voice/draw_step_5.mp3",
+      "text": "Drawing Step 5! Now trace the cozy round tummy, waving arms, and paws!",
+      "bytes": 44640
+    },
+    "draw_step_6": {
+      "file": "assets/voice/draw_step_6.mp3",
+      "text": "Drawing Step 6! Last drawing step! Trace the magic necklace charm and fluffy tail!",
+      "bytes": 50400
+    },
+    "draw_complete": {
+      "file": "assets/voice/draw_complete.mp3",
+      "text": "Hooray! You finished the whole drawing! Now let's learn how to color each part step by step!",
+      "bytes": 48528
+    },
+    "color_step_1": {
+      "file": "assets/voice/color_step_1.mp3",
+      "text": "Coloring Step 1 of 7, Main Fur and Body! Scrub your brush inside the glowing lines to color the head, body, and tail!",
+      "bytes": 60480
+    },
+    "color_step_2": {
+      "file": "assets/voice/color_step_2.mp3",
+      "text": "Coloring Step 2 of 7, Inner Ears and Muzzle! Pick the soft lighter color and fill inside the ears and face patch!",
+      "bytes": 57600
+    },
+    "color_step_3": {
+      "file": "assets/voice/color_step_3.mp3",
+      "text": "Coloring Step 3 of 7, Cozy Tummy Patch! Color the round belly oval and collar band nice and neat!",
+      "bytes": 53712
+    },
+    "color_step_4": {
+      "file": "assets/voice/color_step_4.mp3",
+      "text": "Coloring Step 4 of 7, Rosy Cheeks and Smile! Brush sweet pink onto both cheeks and the happy tongue!",
+      "bytes": 53424
+    },
+    "color_step_5": {
+      "file": "assets/voice/color_step_5.mp3",
+      "text": "Coloring Step 5 of 7, Magic Necklace Charm! Color the special pendant with bright golden shine!",
+      "bytes": 49968
+    },
+    "color_step_6": {
+      "file": "assets/voice/color_step_6.mp3",
+      "text": "Coloring Step 6 of 7, Artist Shading and Eye Sparkles! Add soft shadow under the chin and bright white sparkles in the eyes!",
+      "bytes": 61776
+    },
+    "color_step_7": {
+      "file": "assets/voice/color_step_7.mp3",
+      "text": "Coloring Step 7 of 7, Background and Stickers! Color the sunny background sky and add magic sparkles!",
+      "bytes": 55584
+    },
+    "celebrate": {
+      "file": "assets/voice/celebrate.mp3",
+      "text": "Bravo, little artist! Your Smiling Critter drawing is alive and dancing! Tap Next Friend to draw another one!",
+      "bytes": 59328
+    },
+    "pick_catnap": {
+      "file": "assets/voice/pick_catnap.mp3",
+      "text": "Let's draw CatNap the purple moon kitty!",
+      "bytes": 20880
+    },
+    "pick_dogday": {
+      "file": "assets/voice/pick_dogday.mp3",
+      "text": "Let's draw DogDay the sunny orange puppy!",
+      "bytes": 21456
+    },
+    "pick_bobby": {
+      "file": "assets/voice/pick_bobby.mp3",
+      "text": "Let's draw Bobby BearHug the sweet red bear!",
+      "bytes": 22464
+    },
+    "pick_hoppy": {
+      "file": "assets/voice/pick_hoppy.mp3",
+      "text": "Let's draw Hoppy Hopscotch the bouncy green bunny!",
+      "bytes": 24624
+    },
+    "pick_craftycorn": {
+      "file": "assets/voice/pick_craftycorn.mp3",
+      "text": "Let's draw CraftyCorn the rainbow unicorn!",
+      "bytes": 23184
+    },
+    "pick_pickypiggy": {
+      "file": "assets/voice/pick_pickypiggy.mp3",
+      "text": "Let's draw PickyPiggy the happy pink piggy!",
+      "bytes": 21744
+    },
+    "pick_bubba": {
+      "file": "assets/voice/pick_bubba.mp3",
+      "text": "Let's draw Bubba Bubbaphant the clever blue elephant!",
+      "bytes": 24192
+    },
+    "pick_kickin": {
+      "file": "assets/voice/pick_kickin.mp3",
+      "text": "Let's draw KickinChicken the cool yellow star chick!",
+      "bytes": 24192
+    },
+    "pick_rainbow": {
+      "file": "assets/voice/pick_rainbow.mp3",
+      "text": "Let's draw a Happy Rainbow and Smiling Cloud!",
+      "bytes": 24192
+    },
+    "pick_cupcake": {
+      "file": "assets/voice/pick_cupcake.mp3",
+      "text": "Let's draw a Sweet Strawberry Star Cupcake!",
+      "bytes": 23040
+    }
+  }
+}
