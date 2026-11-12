@@ -159,9 +159,155 @@ export function initDrawingSchoolApp() {
     return null;
   }
 
+  // Free Play Mode: pixel-exact boundary-locked coloring built directly from assets/lineart/*_line_art.png
+  const N_PIXELS = CANVAS_W * CANVAS_H;
+  const freePlayDataCache = {};
+  const freePlayLoading = {};
+  const freePlayPaintCanvases = {};
+  const FREEPLAY_RADII = { crayon: 22, marker: 30, watercolor: 38, glitter: 28 };
+  const FREEPLAY_ALPHA = { crayon: 0.9, marker: 0.96, watercolor: 0.56, glitter: 0.94 };
+
+  function parseHexRgb(hex) {
+    const clean = String(hex || '#9B5DE5').trim().replace(/^#/, '');
+    const n = parseInt(clean.length === 6 ? clean : '9B5DE5', 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function getFreePlayPaintCanvas(charId) {
+    if (!freePlayPaintCanvases[charId]) {
+      const c = document.createElement('canvas');
+      c.width = CANVAS_W;
+      c.height = CANVAS_H;
+      c.getContext('2d', { willReadFrequently: true });
+      freePlayPaintCanvases[charId] = c;
+    }
+    return freePlayPaintCanvases[charId];
+  }
+
+  function buildFreePlayDataFromImage(lesson, img) {
+    const lc = document.createElement('canvas');
+    lc.width = CANVAS_W;
+    lc.height = CANVAS_H;
+    const lg = lc.getContext('2d');
+    lg.fillStyle = '#FFFFFF';
+    lg.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    const r = lesson.coloredRect;
+    lg.drawImage(img, r.dx, r.dy, r.dw, r.dh);
+
+    // Measure on the exact Frame-1 paper+multiply composite so visible cores and fringe match pixel-for-pixel
+    const baseC = document.createElement('canvas');
+    baseC.width = CANVAS_W;
+    baseC.height = CANVAS_H;
+    const bg = baseC.getContext('2d', { willReadFrequently: true });
+    paintPaper(bg, CANVAS_W, CANVAS_H);
+    bg.save();
+    bg.globalCompositeOperation = 'multiply';
+    bg.drawImage(lc, 0, 0);
+    bg.restore();
+    const d0 = bg.getImageData(0, 0, CANVAS_W, CANVAS_H).data;
+
+    const isPaper = new Uint8Array(N_PIXELS);
+    for (let p = 0, o = 0; p < N_PIXELS; p++, o += 4) {
+      const lum = 0.2126 * d0[o] + 0.7152 * d0[o + 1] + 0.0722 * d0[o + 2];
+      if (lum >= 196) isPaper[p] = 1;
+    }
+
+    // 4-connected components over paper pixels
+    const lab = new Int32Array(N_PIXELS);
+    const stack = new Int32Array(N_PIXELS);
+    const areas = [0];
+    let nextId = 0;
+    for (let s = 0; s < N_PIXELS; s++) {
+      if (!isPaper[s] || lab[s]) continue;
+      nextId += 1;
+      let sp = 0;
+      let area = 0;
+      stack[sp++] = s;
+      lab[s] = nextId;
+      while (sp > 0) {
+        const p = stack[--sp];
+        area += 1;
+        const x = p % CANVAS_W;
+        if (x > 0 && isPaper[p - 1] && !lab[p - 1]) { lab[p - 1] = nextId; stack[sp++] = p - 1; }
+        if (x < CANVAS_W - 1 && isPaper[p + 1] && !lab[p + 1]) { lab[p + 1] = nextId; stack[sp++] = p + 1; }
+        if (p >= CANVAS_W && isPaper[p - CANVAS_W] && !lab[p - CANVAS_W]) { lab[p - CANVAS_W] = nextId; stack[sp++] = p - CANVAS_W; }
+        if (p < N_PIXELS - CANVAS_W && isPaper[p + CANVAS_W] && !lab[p + CANVAS_W]) { lab[p + CANVAS_W] = nextId; stack[sp++] = p + CANVAS_W; }
+      }
+      areas.push(area);
+    }
+
+    // Merge tiny enclosed specks (< 40px) into their nearest real region (>= 40px)
+    for (let p = 0; p < N_PIXELS; p++) {
+      if (lab[p] && areas[lab[p]] < 40) lab[p] = 0;
+    }
+
+    // Multi-source city-block BFS from all real regions (>= 40px)
+    const dist = new Int32Array(N_PIXELS).fill(-1);
+    const own = new Int32Array(N_PIXELS);
+    const qd = new Int32Array(N_PIXELS);
+    let qh = 0;
+    let qt = 0;
+    for (let p = 0; p < N_PIXELS; p++) {
+      if (lab[p]) {
+        dist[p] = 0;
+        own[p] = lab[p];
+        qd[qt++] = p;
+      }
+    }
+    while (qh < qt) {
+      const p = qd[qh++];
+      const x = p % CANVAS_W;
+      const dNext = dist[p] + 1;
+      if (x > 0 && dist[p - 1] < 0) { dist[p - 1] = dNext; own[p - 1] = own[p]; qd[qt++] = p - 1; }
+      if (x < CANVAS_W - 1 && dist[p + 1] < 0) { dist[p + 1] = dNext; own[p + 1] = own[p]; qd[qt++] = p + 1; }
+      if (p >= CANVAS_W && dist[p - CANVAS_W] < 0) { dist[p - CANVAS_W] = dNext; own[p - CANVAS_W] = own[p]; qd[qt++] = p - CANVAS_W; }
+      if (p < N_PIXELS - CANVAS_W && dist[p + CANVAS_W] < 0) { dist[p + CANVAS_W] = dNext; own[p + CANVAS_W] = own[p]; qd[qt++] = p + CANVAS_W; }
+    }
+
+    const regionMap = new Int32Array(N_PIXELS);
+    for (let p = 0; p < N_PIXELS; p++) {
+      if (isPaper[p] || (dist[p] >= 0 && dist[p] <= 8)) {
+        regionMap[p] = own[p];
+      }
+    }
+
+    return { lineCanvas: lc, regionMap, regionCount: nextId };
+  }
+
+  function ensureFreePlayData(lesson) {
+    if (!lesson || !lesson.lineArt || !lesson.coloredRect) return null;
+    if (freePlayDataCache[lesson.id]) return freePlayDataCache[lesson.id];
+    if (!freePlayLoading[lesson.id]) {
+      const retryAfter = freePlayRetryAfterMs[lesson.id] || 0;
+      if (performance.now() < retryAfter) return null;
+      freePlayLoading[lesson.id] = true;
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        freePlayFailCount[lesson.id] = 0;
+        freePlayRetryAfterMs[lesson.id] = 0;
+        freePlayDataCache[lesson.id] = buildFreePlayDataFromImage(lesson, img);
+      };
+      img.onerror = () => {
+        const fails = (freePlayFailCount[lesson.id] || 0) + 1;
+        freePlayFailCount[lesson.id] = fails;
+        freePlayRetryAfterMs[lesson.id] = performance.now() + Math.min(8000, 500 * 2 ** (fails - 1));
+        freePlayLoading[lesson.id] = false;
+      };
+      img.src = lesson.lineArt;
+    }
+    return null;
+  }
+
+  const freePlayRetryAfterMs = {};
+  const freePlayFailCount = {};
+  const freePlayUndoBackupCanvases = {};
+  const savedLessonSnapshots = {};
+
   const state = {
+    mode: 'guided', // 'guided' | 'freeplay'
     characterId: 'catnap',
-    phase: 'drawing', // 'drawing' | 'coloring' | 'celebrate'
+    phase: 'drawing', // 'drawing' | 'coloring' | 'celebrate' | 'freeplay'
     drawStepIndex: 0, // 0..5
     strokeSubIndex: 0,
     strokeProgress: 0, // 0..1 on current sub-stroke
@@ -177,11 +323,18 @@ export function initDrawingSchoolApp() {
     strokeEndTimer: 0,
     teacherDemoDone: false,
     stepWaitingNext: false, // Pauses at end of each step & pops up top-right Next Step button
+    confirmingClear: false, // 2-tap confirmation guard before wiping Free Play page
+    confirmClearArmedAt: 0,
+    canUndoClear: false,
     teacherSpeedPxPerSec: 28, // 5-year-old slow hand speed (~28 px/sec)
     lastFrameMs: 0,
     lastPointerMs: 0,
+    lastFreePlayTickMs: 0,
     danceTime: 0,
     pointerDown: false,
+    activePointerId: null,
+    freePlayActiveRegionId: 0,
+    freePlayLastPt: null,
     lastPt: null,
     lastDabPt: null,
     paintedCells: new Set(),
@@ -296,8 +449,143 @@ export function initDrawingSchoolApp() {
     ui.sync(state, getLesson());
   }
 
+  let clearConfirmTimer = 0;
+  let undoClearTimer = 0;
+
+  function saveCurrentLessonSnapshot() {
+    if (state.phase === 'freeplay') return;
+    const clonedParts = {};
+    for (const pid of partOrder) {
+      const srcC = partCanvases[pid];
+      const dstC = document.createElement('canvas');
+      dstC.width = CANVAS_W;
+      dstC.height = CANVAS_H;
+      if (srcC) dstC.getContext('2d').drawImage(srcC, 0, 0);
+      clonedParts[pid] = dstC;
+    }
+    savedLessonSnapshots[state.characterId] = {
+      phase: state.phase,
+      drawStepIndex: state.drawStepIndex,
+      strokeSubIndex: state.strokeSubIndex,
+      strokeProgress: state.strokeProgress,
+      strokeTargetDist: state.strokeTargetDist,
+      colorStepIndex: state.colorStepIndex,
+      colorCoverage: state.colorCoverage,
+      selectedColor: state.selectedColor,
+      selectedTool: state.selectedTool,
+      stepWaitingNext: state.stepWaitingNext,
+      teacherPhase: state.teacherPhase,
+      teacherHoldTimer: state.teacherHoldTimer,
+      teacherDemoDone: state.teacherDemoDone,
+      paintedCells: new Set(state.paintedCells),
+      stickers: state.stickers.map((s) => ({ ...s })),
+      partFilledColors: { ...partFilledColors },
+      partCanvases: clonedParts,
+      subtitleText: state.subtitleText,
+    };
+  }
+
+  function restoreLessonSnapshot(charId, quiet = false) {
+    const snap = savedLessonSnapshots[charId];
+    if (!snap) return false;
+    state.characterId = charId;
+    state.phase = snap.phase;
+    state.drawStepIndex = snap.drawStepIndex;
+    state.strokeSubIndex = snap.strokeSubIndex;
+    state.strokeProgress = snap.strokeProgress;
+    state.strokeTargetDist = snap.strokeTargetDist;
+    state.colorStepIndex = snap.colorStepIndex;
+    state.colorCoverage = snap.colorCoverage;
+    state.selectedColor = snap.selectedColor;
+    state.selectedTool = snap.selectedTool;
+    state.stepWaitingNext = snap.stepWaitingNext;
+    state.teacherPhase = snap.teacherPhase;
+    state.teacherHoldTimer = snap.teacherHoldTimer;
+    state.teacherDemoDone = snap.teacherDemoDone;
+    state.paintedCells = new Set(snap.paintedCells);
+    state.stickers = snap.stickers.map((s) => ({ ...s }));
+    state.sparkles = [];
+    for (const k of Object.keys(partFilledColors)) delete partFilledColors[k];
+    Object.assign(partFilledColors, snap.partFilledColors);
+    for (const pid of partOrder) {
+      const nc = document.createElement('canvas');
+      nc.width = CANVAS_W;
+      nc.height = CANVAS_H;
+      if (snap.partCanvases[pid]) nc.getContext('2d').drawImage(snap.partCanvases[pid], 0, 0);
+      partCanvases[pid] = nc;
+    }
+    state.subtitleText = snap.subtitleText;
+    const subEl = document.getElementById('voice-subtitle-text');
+    if (subEl) subEl.textContent = snap.subtitleText;
+    syncUI();
+    if (!quiet) {
+      const lesson = getLesson();
+      if (state.phase === 'drawing') {
+        const ds = lesson.drawSteps[state.drawStepIndex];
+        if (ds) audio.speak(ds.voiceId);
+      } else if (state.phase === 'coloring') {
+        const cs = lesson.colorSteps[state.colorStepIndex];
+        if (cs) audio.speak(cs.voiceId);
+      } else if (state.phase === 'celebrate') {
+        audio.speak('celebrate');
+      }
+    }
+    return true;
+  }
+
+  function setFreePlaySubtitle(lesson) {
+    const who = lesson ? lesson.name : 'your friend';
+    const txt = `Free Play Coloring! Pick any color and brush for ${who} — colors stay neatly inside the lines!`;
+    state.subtitleText = txt;
+    const subEl = document.getElementById('voice-subtitle-text');
+    if (subEl) subEl.textContent = txt;
+  }
+
+  function defaultVividColorForLesson(lesson) {
+    const base = lesson?.palette?.base || '';
+    if (
+      base &&
+      base.toUpperCase() !== '#F8F9FA' &&
+      base.toUpperCase() !== '#F3F0FF' &&
+      SWATCH_PALETTE.some((s) => sameHexColor(s.hex, base))
+    ) {
+      return base;
+    }
+    const cs0 = lesson?.colorSteps?.[0]?.recommendedColor;
+    if (cs0 && cs0.toUpperCase() !== '#F8F9FA' && cs0.toUpperCase() !== '#F3F0FF') {
+      return cs0;
+    }
+    return '#9B5DE5';
+  }
+
   function selectCharacter(charId, quiet = false) {
     const found = CHARACTER_LESSONS.find((c) => c.id === charId) || CHARACTER_LESSONS[0];
+    clearTimeout(clearConfirmTimer);
+    clearTimeout(undoClearTimer);
+    state.confirmingClear = false;
+    state.confirmClearArmedAt = 0;
+    state.canUndoClear = false;
+    state.pointerDown = false;
+    state.activePointerId = null;
+    state.freePlayActiveRegionId = 0;
+    state.freePlayLastPt = null;
+
+    if (state.mode === 'freeplay') {
+      ensureFreePlayData(found);
+      getFreePlayPaintCanvas(found.id);
+      state.characterId = found.id;
+      state.phase = 'freeplay';
+      state.stepWaitingNext = false;
+      state.selectedColor = defaultVividColorForLesson(found);
+      setFreePlaySubtitle(found);
+      syncUI();
+      if (!quiet) {
+        audio.speak('freeplay_welcome', () => setFreePlaySubtitle(found));
+      }
+      return;
+    }
+
+    delete savedLessonSnapshots[found.id];
     ensureColoredFillCanvas(found);
     state.characterId = found.id;
     state.phase = 'drawing';
@@ -315,6 +603,236 @@ export function initDrawingSchoolApp() {
     syncUI();
     if (!quiet) {
       audio.speak(found.voicePickId, setSubtitle);
+    }
+  }
+
+  function setMode(nextMode, { keepPicker = false, quiet = false } = {}) {
+    const norm = String(nextMode || '').toLowerCase().replace(/[-_]/g, '');
+    const target = ['freeplay', 'free', 'freecolor', 'freecolour'].includes(norm) ? 'freeplay' : 'guided';
+    if (
+      target === state.mode &&
+      ((target === 'freeplay' && state.phase === 'freeplay') || (target === 'guided' && state.phase !== 'freeplay'))
+    ) {
+      syncUI();
+      return;
+    }
+
+    clearTimeout(clearConfirmTimer);
+    clearTimeout(undoClearTimer);
+    state.confirmingClear = false;
+    state.confirmClearArmedAt = 0;
+    state.canUndoClear = false;
+    state.pointerDown = false;
+    state.activePointerId = null;
+    state.freePlayActiveRegionId = 0;
+    state.freePlayLastPt = null;
+
+    if (target === 'freeplay') {
+      saveCurrentLessonSnapshot();
+      state.mode = 'freeplay';
+      state.stepWaitingNext = false;
+      const lesson = getLesson();
+      ensureFreePlayData(lesson);
+      getFreePlayPaintCanvas(lesson.id);
+      state.phase = 'freeplay';
+      if (!state.selectedColor || state.selectedColor.toUpperCase() === '#F8F9FA') {
+        state.selectedColor = defaultVividColorForLesson(lesson);
+      }
+      setFreePlaySubtitle(lesson);
+      syncUI();
+      if (!quiet && !keepPicker) {
+        audio.playTraceTick();
+        audio.speak('freeplay_welcome', () => setFreePlaySubtitle(lesson));
+      }
+    } else {
+      state.mode = 'guided';
+      if (!restoreLessonSnapshot(state.characterId, quiet || keepPicker)) {
+        selectCharacter(state.characterId, quiet || keepPicker);
+      }
+    }
+  }
+
+  function handleCleanPage() {
+    if (state.phase !== 'freeplay') return;
+
+    // If an undo backup is active, 1 tap restores the child's picture immediately!
+    if (state.canUndoClear && freePlayUndoBackupCanvases[state.characterId]) {
+      clearTimeout(undoClearTimer);
+      state.canUndoClear = false;
+      state.confirmingClear = false;
+      const fpCanvas = getFreePlayPaintCanvas(state.characterId);
+      const pg = fpCanvas.getContext('2d', { willReadFrequently: true });
+      pg.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      pg.drawImage(freePlayUndoBackupCanvases[state.characterId], 0, 0);
+      audio.playStepComplete();
+      const txt = 'Hooray, your picture is back!';
+      state.subtitleText = txt;
+      const subEl = document.getElementById('voice-subtitle-text');
+      if (subEl) subEl.textContent = txt;
+      audio.speak('undo_restore', () => {
+        state.subtitleText = txt;
+        if (subEl) subEl.textContent = txt;
+      });
+      syncUI();
+      return;
+    }
+
+    if (!state.confirmingClear) {
+      state.confirmingClear = true;
+      state.confirmClearArmedAt = performance.now();
+      audio.playTraceTick();
+      const txt = 'Tap the new-page button again if you want a fresh blank page!';
+      state.subtitleText = txt;
+      const subEl = document.getElementById('voice-subtitle-text');
+      if (subEl) subEl.textContent = txt;
+      audio.speak('clean_page_confirm', () => {
+        state.subtitleText = txt;
+        if (subEl) subEl.textContent = txt;
+      });
+      syncUI();
+      clearTimeout(clearConfirmTimer);
+      clearConfirmTimer = setTimeout(() => {
+        if (state.confirmingClear) {
+          state.confirmingClear = false;
+          state.confirmClearArmedAt = 0;
+          if (state.phase === 'freeplay') setFreePlaySubtitle(getLesson());
+          syncUI();
+        }
+      }, 5000);
+      return;
+    }
+
+    // Ignore rapid accidental double-taps (< 750 ms after the 1st tap)
+    if (performance.now() - state.confirmClearArmedAt < 750) {
+      return;
+    }
+
+    clearTimeout(clearConfirmTimer);
+    state.confirmingClear = false;
+    state.confirmClearArmedAt = 0;
+
+    // Back up current painting for 12s undo before clearing
+    const fpCanvas = getFreePlayPaintCanvas(state.characterId);
+    const backup = document.createElement('canvas');
+    backup.width = CANVAS_W;
+    backup.height = CANVAS_H;
+    backup.getContext('2d').drawImage(fpCanvas, 0, 0);
+    freePlayUndoBackupCanvases[state.characterId] = backup;
+
+    fpCanvas.getContext('2d', { willReadFrequently: true }).clearRect(0, 0, CANVAS_W, CANVAS_H);
+    state.canUndoClear = true;
+    audio.playStepComplete();
+    const txt = 'Fresh blank page! Tap the undo arrow if you want your picture back!';
+    state.subtitleText = txt;
+    const subEl = document.getElementById('voice-subtitle-text');
+    if (subEl) subEl.textContent = txt;
+    audio.speak('clean_page_done', () => {
+      state.subtitleText = txt;
+      if (subEl) subEl.textContent = txt;
+    });
+    syncUI();
+
+    clearTimeout(undoClearTimer);
+    undoClearTimer = setTimeout(() => {
+      if (state.canUndoClear) {
+        state.canUndoClear = false;
+        if (state.phase === 'freeplay') setFreePlaySubtitle(getLesson());
+        syncUI();
+      }
+    }, 12000);
+  }
+
+  function paintFreePlayDab(x, y) {
+    const lesson = getLesson();
+    const fpData = ensureFreePlayData(lesson);
+    if (!fpData || !state.freePlayActiveRegionId) return;
+    const lockId = state.freePlayActiveRegionId;
+    const tool = FREEPLAY_RADII[state.selectedTool] ? state.selectedTool : 'marker';
+    const rad = FREEPLAY_RADII[tool];
+    const baseAlpha = FREEPLAY_ALPHA[tool];
+    const [cr, cg, cb] = parseHexRgb(state.selectedColor);
+
+    const x0 = Math.max(0, Math.floor(x - rad));
+    const y0 = Math.max(0, Math.floor(y - rad));
+    const x1 = Math.min(CANVAS_W - 1, Math.ceil(x + rad));
+    const y1 = Math.min(CANVAS_H - 1, Math.ceil(y + rad));
+    if (x1 < x0 || y1 < y0) return;
+
+    const w = x1 - x0 + 1;
+    const h = y1 - y0 + 1;
+    const fpCanvas = getFreePlayPaintCanvas(lesson.id);
+    const pg = fpCanvas.getContext('2d', { willReadFrequently: true });
+    const imgData = pg.getImageData(x0, y0, w, h);
+    const px = imgData.data;
+    const r2 = rad * rad;
+    const innerGlitterR2 = Math.max(4, (rad - 3) * (rad - 3));
+    const regionMap = fpData.regionMap;
+
+    for (let yy = y0; yy <= y1; yy++) {
+      const dy = yy - y;
+      const dy2 = dy * dy;
+      const rowOff = yy * CANVAS_W;
+      const localRow = (yy - y0) * w;
+      for (let xx = x0; xx <= x1; xx++) {
+        const dx = xx - x;
+        const d2 = dx * dx + dy2;
+        if (d2 > r2) continue;
+        if (regionMap[rowOff + xx] !== lockId) continue;
+
+        let a = baseAlpha;
+        let pr = cr;
+        let pgc = cg;
+        let pb = cb;
+        if (tool === 'crayon') {
+          const grain = (((xx * 73856093) ^ (yy * 19349663)) >>> 0) & 15;
+          a = 0.82 + (grain / 15) * 0.15;
+        } else if (tool === 'watercolor') {
+          a = baseAlpha * (1 - 0.32 * (d2 / r2));
+        } else if (tool === 'glitter' && d2 <= innerGlitterR2) {
+          const spark = (((xx * 83492791) ^ (yy * 2971215073)) >>> 0) & 63;
+          if (spark === 0) {
+            pr = 255;
+            pgc = 249;
+            pb = 219;
+            a = 0.98;
+          }
+        }
+
+        const o = (localRow + (xx - x0)) * 4;
+        const da = px[o + 3] / 255;
+        const oa = a + da * (1 - a);
+        px[o] = (pr * a + px[o] * da * (1 - a)) / oa;
+        px[o + 1] = (pgc * a + px[o + 1] * da * (1 - a)) / oa;
+        px[o + 2] = (pb * a + px[o + 2] * da * (1 - a)) / oa;
+        px[o + 3] = oa * 255;
+      }
+    }
+    pg.putImageData(imgData, x0, y0);
+  }
+
+  function strokeFreePlayTo(x, y) {
+    if (!state.freePlayActiveRegionId) {
+      state.freePlayLastPt = { x, y };
+      return;
+    }
+    const last = state.freePlayLastPt;
+    if (!last) {
+      paintFreePlayDab(x, y);
+      state.freePlayLastPt = { x, y };
+    } else {
+      const dist = Math.hypot(x - last.x, y - last.y);
+      const rad = FREEPLAY_RADII[state.selectedTool] || 30;
+      const step = Math.max(2, rad * 0.32);
+      const n = Math.max(1, Math.ceil(dist / step));
+      for (let i = 1; i <= n; i++) {
+        paintFreePlayDab(last.x + ((x - last.x) * i) / n, last.y + ((y - last.y) * i) / n);
+      }
+      state.freePlayLastPt = { x, y };
+    }
+    const now = performance.now();
+    if (now - state.lastFreePlayTickMs > 150) {
+      state.lastFreePlayTickMs = now;
+      audio.playTraceTick();
     }
   }
 
@@ -574,6 +1092,10 @@ export function initDrawingSchoolApp() {
   }
 
   function handlePointerMoveOnEasel(x, y) {
+    if (state.phase === 'freeplay') {
+      strokeFreePlayTo(x, y);
+      return true;
+    }
     const lesson = getLesson();
     if (state.phase === 'drawing') {
       const ds = lesson.drawSteps[state.drawStepIndex];
@@ -672,6 +1194,11 @@ export function initDrawingSchoolApp() {
   }
 
   function jumpToPhase(targetPhase, stepIdx = 0) {
+    if (targetPhase === 'freeplay') {
+      setMode('freeplay');
+      return;
+    }
+    state.mode = 'guided';
     const lesson = getLesson();
     state.stepWaitingNext = false;
     if (targetPhase === 'drawing') {
@@ -821,6 +1348,22 @@ export function initDrawingSchoolApp() {
     state.lastFrameMs = ts;
 
     const lesson = getLesson();
+    if (state.phase === 'freeplay') {
+      const fpData = ensureFreePlayData(lesson);
+      ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      paintPaper(ctx, CANVAS_W, CANVAS_H);
+      if (fpData) {
+        const fpPaint = getFreePlayPaintCanvas(lesson.id);
+        ctx.drawImage(fpPaint, 0, 0);
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(fpData.lineCanvas, 0, 0);
+        ctx.restore();
+      }
+      requestAnimationFrame(renderEasel);
+      return;
+    }
+
     ensureColoredFillCanvas(lesson);
     state.danceTime += dt;
 
@@ -1081,6 +1624,12 @@ export function initDrawingSchoolApp() {
   // Wire DOM controls: the markup and listeners live in ./ui.js, the game supplies the actions.
   const replayTeacherVoice = () => {
     const lesson = getLesson();
+    if (state.phase === 'freeplay') {
+      setFreePlaySubtitle(lesson);
+      audio.speak('freeplay_welcome', () => setFreePlaySubtitle(lesson));
+      syncUI();
+      return;
+    }
     if (state.phase === 'drawing') {
       state.stepWaitingNext = false;
       state.strokeSubIndex = 0;
@@ -1120,14 +1669,19 @@ export function initDrawingSchoolApp() {
     swatches: SWATCH_PALETTE,
     handlers: {
       onPickFriend: (id) => selectCharacter(id),
+      onModeSelect: (m) => setMode(m, { keepPicker: true }),
+      onToggleMode: () => setMode(state.mode === 'freeplay' ? 'guided' : 'freeplay'),
+      onCleanPage: () => handleCleanPage(),
       onJump: (phase, idx) => jumpToPhase(phase, idx),
       onColor: (hex) => {
         state.selectedColor = hex;
+        state.confirmingClear = false;
         audio.playTraceTick();
         syncUI();
       },
       onTool: (tool) => {
         state.selectedTool = tool;
+        state.confirmingClear = false;
         audio.playTraceTick();
         syncUI();
       },
@@ -1149,7 +1703,42 @@ export function initDrawingSchoolApp() {
     };
   }
 
+  canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+  canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
   canvas.addEventListener('pointerdown', (e) => {
+    if (state.phase === 'freeplay') {
+      if (
+        state.pointerDown &&
+        state.activePointerId !== null &&
+        e.pointerId !== state.activePointerId &&
+        e.isPrimary === false
+      ) {
+        return;
+      }
+      const fpData = ensureFreePlayData(getLesson());
+      if (!fpData) return;
+      if (state.confirmingClear || state.canUndoClear) {
+        clearTimeout(clearConfirmTimer);
+        clearTimeout(undoClearTimer);
+        state.confirmingClear = false;
+        state.confirmClearArmedAt = 0;
+        state.canUndoClear = false;
+        setFreePlaySubtitle(getLesson());
+      }
+      state.pointerDown = true;
+      state.activePointerId = e.pointerId ?? null;
+      state.lastPointerMs = performance.now();
+      const pt = toCanvasCoords(e);
+      state.lastPt = pt;
+      const cxp = Math.max(0, Math.min(CANVAS_W - 1, Math.round(pt.x)));
+      const cyp = Math.max(0, Math.min(CANVAS_H - 1, Math.round(pt.y)));
+      state.freePlayActiveRegionId = fpData.regionMap[cyp * CANVAS_W + cxp] || 0;
+      state.freePlayLastPt = null;
+      strokeFreePlayTo(pt.x, pt.y);
+      syncUI();
+      return;
+    }
     state.pointerDown = true;
     state.lastPointerMs = performance.now();
     const pt = toCanvasCoords(e);
@@ -1159,20 +1748,51 @@ export function initDrawingSchoolApp() {
 
   window.addEventListener('pointermove', (e) => {
     if (!state.pointerDown) return;
+    if (state.phase === 'freeplay') {
+      if (state.activePointerId !== null && e.pointerId !== undefined && e.pointerId !== state.activePointerId) {
+        return;
+      }
+      const pt = toCanvasCoords(e);
+      state.lastPt = pt;
+      strokeFreePlayTo(pt.x, pt.y);
+      return;
+    }
     const pt = toCanvasCoords(e);
     const consumed = handlePointerMoveOnEasel(pt.x, pt.y);
     if (consumed !== false) state.lastPt = pt;
   });
 
-  window.addEventListener('pointerup', () => {
+  const endPointer = (e) => {
+    if (
+      state.phase === 'freeplay' &&
+      state.activePointerId !== null &&
+      e &&
+      e.pointerId !== undefined &&
+      e.pointerId !== state.activePointerId
+    ) {
+      return;
+    }
     state.pointerDown = false;
-  });
+    state.activePointerId = null;
+    state.freePlayActiveRegionId = 0;
+    state.freePlayLastPt = null;
+  };
+  const resetPointerAll = () => {
+    state.pointerDown = false;
+    state.activePointerId = null;
+    state.freePlayActiveRegionId = 0;
+    state.freePlayLastPt = null;
+  };
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
+  window.addEventListener('blur', resetPointerAll);
 
   // Expose QA seam on window.__DRAW_SCHOOL__
   window.__DRAW_SCHOOL__ = {
     getState() {
       const lesson = getLesson();
       return {
+        mode: state.mode,
         characterId: state.characterId,
         characterName: lesson.name,
         phase: state.phase,
@@ -1184,6 +1804,10 @@ export function initDrawingSchoolApp() {
         teacherHoldTimer: state.teacherHoldTimer,
         teacherDemoDone: state.teacherDemoDone,
         stepWaitingNext: state.stepWaitingNext,
+        confirmingClear: state.confirmingClear,
+        canUndoClear: state.canUndoClear,
+        freePlayReady: Boolean(freePlayDataCache[state.characterId]),
+        freePlayActiveRegionId: state.freePlayActiveRegionId,
         teacherSpeedPxPerSec: state.teacherSpeedPxPerSec,
         colorStepIndex: state.colorStepIndex,
         colorStepCount: lesson.colorSteps.length,
@@ -1197,6 +1821,21 @@ export function initDrawingSchoolApp() {
         totalCharacters: CHARACTER_LESSONS.length,
         pickerOpen: ui.isPickerOpen(),
       };
+    },
+    setMode(mode) {
+      ui.closePicker();
+      setMode(mode);
+      return this.getState();
+    },
+    setColor(hex) {
+      state.selectedColor = hex;
+      syncUI();
+      return this.getState();
+    },
+    setTool(tool) {
+      state.selectedTool = tool;
+      syncUI();
+      return this.getState();
     },
     selectCharacter(id) {
       ui.closePicker();
@@ -1232,15 +1871,27 @@ export function initDrawingSchoolApp() {
     },
   };
 
-  selectCharacter('catnap', true);
-  setSubtitle('welcome');
-  // First screen is the friend picker cover; ?play=<friend id> opens straight on the paper.
-  const playParam = new URLSearchParams(window.location.search).get('play');
-  if (playParam === null) {
-    ui.openPicker({ closable: false });
-  } else {
+  // Boot from URL params (?mode=freeplay, ?play=<id>)
+  const searchParams = new URLSearchParams(window.location.search);
+  const rawMode = (searchParams.get('mode') || '').toLowerCase().replace(/[-_]/g, '');
+  const wantFreePlay = ['freeplay', 'free', 'freecolor', 'freecolour'].includes(rawMode);
+  const playParam = searchParams.get('play');
+  const bootCharId = CHARACTER_LESSONS.find((c) => c.id === playParam)?.id || 'catnap';
+
+  if (wantFreePlay) {
+    state.mode = 'freeplay';
+    selectCharacter(bootCharId, true);
     ui.closePicker();
-    if (CHARACTER_LESSONS.some((c) => c.id === playParam)) selectCharacter(playParam, true);
+  } else {
+    state.mode = 'guided';
+    selectCharacter(bootCharId, true);
+    if (playParam === null) {
+      setSubtitle('welcome');
+      ui.openPicker({ closable: false });
+    } else {
+      setSubtitle(getLesson().drawSteps[0]?.voiceId || 'draw_step_1');
+      ui.closePicker();
+    }
   }
   requestAnimationFrame(renderEasel);
 }

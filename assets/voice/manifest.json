@@ -130,6 +130,26 @@
       "file": "assets/voice/pick_cupcake.mp3",
       "text": "Let's draw a Sweet Strawberry Star Cupcake!",
       "bytes": 23040
+    },
+    "freeplay_welcome": {
+      "file": "assets/voice/freeplay_welcome.mp3",
+      "text": "Free play! Pick any color and brush you like! Every color stays neatly inside the lines!",
+      "bytes": 52272
+    },
+    "clean_page_confirm": {
+      "file": "assets/voice/clean_page_confirm.mp3",
+      "text": "Tap again if you want a fresh new page!",
+      "bytes": 21024
+    },
+    "clean_page_done": {
+      "file": "assets/voice/clean_page_done.mp3",
+      "text": "Fresh new page! Tap undo if you want your picture back!",
+      "bytes": 32976
+    },
+    "undo_restore": {
+      "file": "assets/voice/undo_restore.mp3",
+      "text": "Hooray, your picture is back!",
+      "bytes": 17856
     }
   }
 }

@@ -69,6 +69,38 @@ const ICONS = {
      <circle cx="30" cy="14" r="3.400" fill="#7CC4F5" stroke="${INK}" stroke-width="2"/>
      <circle cx="36" cy="21.500" r="3.400" fill="#5EC27F" stroke="${INK}" stroke-width="2"/>`
   ),
+  freeplay: svg(
+    `<path d="M23 7C12.500 7 5.500 14.200 5.500 24c0 9.200 6.800 16.500 16 16.500 3.800 0 4.800-2.700 3.600-4.800-1.200-2.400.2-4.800 3.100-4.800h4.200c5.300 0 8.800-3.800 8.800-8.600C41.200 13.400 33.400 7 23 7z" fill="#FFCB45" ${S}/>
+     <circle cx="14" cy="23" r="3.400" fill="#FF7F7F" stroke="${INK}" stroke-width="2"/>
+     <circle cx="20" cy="14.500" r="3.400" fill="#fff" stroke="${INK}" stroke-width="2"/>
+     <circle cx="29.500" cy="14" r="3.400" fill="#7CC4F5" stroke="${INK}" stroke-width="2"/>
+     <circle cx="35" cy="21.500" r="3.400" fill="#5EC27F" stroke="${INK}" stroke-width="2"/>
+     <path d="M37 32l3 8-8-3 6-11 5 5z" fill="#FF8FA3" stroke="${INK}" stroke-width="2.400" stroke-linejoin="round"/>`
+  ),
+  steps: svg(
+    `<rect x="8" y="8" width="32" height="32" rx="8" fill="#FFF6E3" ${S}/>
+     <circle cx="16.500" cy="17" r="3.600" fill="#5EC27F" stroke="${INK}" stroke-width="2.200"/>
+     <path d="M24 17h10" fill="none" ${S}/>
+     <circle cx="16.500" cy="26.500" r="3.600" fill="#FFCB45" stroke="${INK}" stroke-width="2.200"/>
+     <path d="M24 26.500h10" fill="none" ${S}/>
+     <path d="M28 36l9-9 4 4-9 9-5 1z" fill="#FF8FA3" stroke="${INK}" stroke-width="2.400" stroke-linejoin="round"/>`
+  ),
+  eraser: svg(
+    `<g transform="rotate(-28 24 24)">
+       <rect x="11" y="14" width="26" height="19" rx="5" fill="#FF8FA3" ${S}/>
+       <path d="M24 14h13a5 5 0 0 1 5 5v9a5 5 0 0 1-5 5H24z" fill="#FFF6E3" ${S}/>
+     </g>
+     <path d="M12 40h24" fill="none" ${S}/>`
+  ),
+  new_page: svg(
+    `<path d="M11 7h18l9 9v25H11z" fill="#FFFCF4" ${S}/>
+     <path d="M29 7v9h9" fill="#FFF6E3" ${S}/>
+     <path d="M22 25v8M18 29h8" fill="none" stroke="#5EC27F" stroke-width="3.500" stroke-linecap="round"/>`
+  ),
+  undo: svg(
+    `<path d="M19 14 10 22.500 19 31" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+     <path d="M11.500 22.500H28a9.500 9.500 0 1 1 0 19h-7" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`
+  ),
   // Brush tools: tip down on the paper in the colour that is currently selected,
   // with a little sample of the mark each one makes.
   crayon: svg(
@@ -281,11 +313,23 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
   if (closeBtn) closeBtn.addEventListener('click', closePicker);
   const coverVoice = $('btn-cover-voice');
   if (coverVoice) coverVoice.addEventListener('click', () => call('onVoice'));
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      call('onModeSelect', btn.dataset.mode);
+    });
+  });
 
   /* ---- step trail (beads on the sketchbook binding) ---- */
   const trailEl = $('step-ladder');
   if (trailEl) {
     trailEl.addEventListener('click', (e) => {
+      const cleanBtn = e.target.closest('#btn-clean-page');
+      if (cleanBtn) {
+        closePicker();
+        call('onCleanPage');
+        return;
+      }
       const b = e.target.closest('[data-jump-phase]');
       if (!b) return;
       closePicker();
@@ -294,6 +338,7 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
   }
 
   /* ---- crayons ---- */
+  let lastClickedSwatchId = null;
   const swatchEl = $('swatch-grid');
   if (swatchEl) {
     const n = swatches.length;
@@ -326,6 +371,7 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
     swatchEl.addEventListener('click', (e) => {
       const btn = e.target.closest('.swatch-btn');
       if (!btn) return;
+      lastClickedSwatchId = btn.id || null;
       closePicker();
       call('onColor', btn.dataset.color);
     });
@@ -348,6 +394,7 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
       });
     }
   };
+  wire('btn-toggle-freeplay', 'onToggleMode');
   wire('btn-auto-step', 'onAutoStep');
   wire('btn-fill-part', 'onFillPart');
   wire('btn-next-step-top', 'onNextStep');
@@ -376,6 +423,16 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
 
   function trailHTML(state, lesson) {
     const phase = state.phase;
+    if (phase === 'freeplay') {
+      const undoMode = Boolean(state.canUndoClear);
+      const label = undoMode ? 'Bring back my picture' : 'New blank page (tap twice)';
+      const ico = undoMode ? ICONS.undo : ICONS.new_page;
+      return (
+        `<span class="trail-chip is-active" role="img" aria-label="Coloring palette">${ICONS.freeplay}</span>` +
+        `<button type="button" class="trail-chip is-button clean-page-btn" id="btn-clean-page" ` +
+        `aria-label="${label}" title="${label}">${ico}</button>`
+      );
+    }
     const drawing = phase === 'drawing';
     const out = [];
     if (drawing) {
@@ -458,6 +515,36 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
   const sameHex = (a, b) => Boolean(a && b && String(a).toUpperCase() === String(b).toUpperCase());
 
   function sync(state, lesson) {
+    const mode = state.mode === 'freeplay' ? 'freeplay' : 'guided';
+    if (cache.mode !== mode) {
+      cache.mode = mode;
+      root.dataset.mode = mode;
+      const gBtn = $('btn-mode-guided');
+      const fBtn = $('btn-mode-freeplay');
+      if (gBtn) {
+        gBtn.classList.toggle('is-active', mode === 'guided');
+        gBtn.setAttribute('aria-pressed', mode === 'guided' ? 'true' : 'false');
+      }
+      if (fBtn) {
+        fBtn.classList.toggle('is-active', mode === 'freeplay');
+        fBtn.setAttribute('aria-pressed', mode === 'freeplay' ? 'true' : 'false');
+      }
+      const toggleBtn = $('btn-toggle-freeplay');
+      if (toggleBtn) {
+        if (mode === 'freeplay') {
+          toggleBtn.innerHTML = ICONS.steps;
+          toggleBtn.setAttribute('aria-label', 'Step-by-Step Lesson');
+          toggleBtn.setAttribute('title', 'Step-by-Step Lesson');
+          toggleBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          toggleBtn.innerHTML = ICONS.freeplay;
+          toggleBtn.setAttribute('aria-label', 'Free Play Coloring');
+          toggleBtn.setAttribute('title', 'Free Play Coloring');
+          toggleBtn.setAttribute('aria-pressed', 'false');
+        }
+      }
+    }
+
     const phase = state.phase;
     if (cache.phase !== phase) {
       const before = cache.phase;
@@ -466,7 +553,19 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
       if (phase === 'celebrate' && before) throwConfetti();
     }
 
-    const stepReady = state.stepWaitingNext && phase !== 'celebrate' ? '1' : '0';
+    const confirmClear = state.confirmingClear && phase === 'freeplay' ? '1' : '0';
+    if (cache.confirmClear !== confirmClear) {
+      cache.confirmClear = confirmClear;
+      root.dataset.confirmClear = confirmClear;
+    }
+
+    const canUndo = state.canUndoClear && phase === 'freeplay' ? '1' : '0';
+    if (cache.canUndo !== canUndo) {
+      cache.canUndo = canUndo;
+      root.dataset.canUndo = canUndo;
+    }
+
+    const stepReady = state.stepWaitingNext && phase !== 'celebrate' && phase !== 'freeplay' ? '1' : '0';
     if (cache.stepReady !== stepReady) {
       cache.stepReady = stepReady;
       root.dataset.stepReady = stepReady;
@@ -487,7 +586,11 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
       setText('next-step-popup-label', nextLabel);
     }
     const rec =
-      phase === 'coloring' ? cs.recommendedColor : (lesson.palette && lesson.palette.base) || friendColor(lesson);
+      phase === 'coloring'
+        ? cs.recommendedColor
+        : phase === 'freeplay'
+          ? friendColor(lesson)
+          : (lesson.palette && lesson.palette.base) || friendColor(lesson);
 
     setVar('--cur', state.selectedColor);
     setVar('--rec', rec);
@@ -495,7 +598,12 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
 
     // Words for grown-ups and screen readers (kept off the child's screen).
     let pct = 100;
-    if (phase === 'drawing') {
+    if (phase === 'freeplay') {
+      setText('phase-badge', 'FREE PLAY COLORING');
+      setText('step-title', `${lesson.name} Free Play Coloring`);
+      setText('step-hint', 'Pick any crayon and brush — colors stay inside the lines!');
+      setText('step-meter-label', 'Free Play');
+    } else if (phase === 'drawing') {
       const subs = Math.max(1, (ds.strokes || []).length);
       pct = Math.min(100, Math.round(((state.strokeSubIndex + state.strokeProgress) / subs) * 100));
       setText('phase-badge', `DRAW STEP ${state.drawStepIndex + 1} OF ${draw.length}`);
@@ -516,7 +624,7 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
     }
 
     // Step beads: rebuilt only when the step changes, the meter moves on every call.
-    const trailKey = `${lesson.id}|${phase}|${state.drawStepIndex}|${state.colorStepIndex}|${draw.length}|${color.length}`;
+    const trailKey = `${lesson.id}|${phase}|${state.drawStepIndex}|${state.colorStepIndex}|${draw.length}|${color.length}|${state.canUndoClear ? 1 : 0}`;
     if (trailEl && cache.trailKey !== trailKey) {
       cache.trailKey = trailKey;
       trailEl.innerHTML = trailHTML(state, lesson);
@@ -550,8 +658,8 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
       if (nextBtn && nextLesson) nextBtn.setAttribute('aria-label', `Next friend: ${nextLesson.name}`);
     }
 
-    // Crayons: the starred crayon always carries the colour the teacher suggests.
-    const swKey = `${state.selectedColor}|${rec}|${phase}`;
+    // Crayons: the starred crayon always carries the colour the teacher suggests (or friend signature in Free Play).
+    const swKey = `${state.selectedColor}|${rec}|${phase}|${lastClickedSwatchId || ''}|${lesson.id}`;
     if (cache.swKey !== swKey) {
       cache.swKey = swKey;
       const starBtn = $('btn-swatch-rec');
@@ -565,12 +673,20 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
         }
         starBtn.dataset.color = rec;
         starBtn.style.setProperty('--c', rec);
+        starBtn.setAttribute(
+          'aria-label',
+          phase === 'freeplay' ? `${lesson.name} signature colour` : "Teacher's pick colour"
+        );
       }
+      const clickedEl = lastClickedSwatchId ? $(lastClickedSwatchId) : null;
+      const useClicked = Boolean(clickedEl && sameHex(clickedEl.dataset.color, state.selectedColor));
       const starPicked = sameHex(rec, state.selectedColor);
       document.querySelectorAll('.swatch-btn').forEach((btn) => {
         const hex = btn.dataset.color;
         const isStar = btn === starBtn;
-        const picked = sameHex(hex, state.selectedColor) && (isStar || !starPicked);
+        const picked = useClicked
+          ? btn === clickedEl
+          : sameHex(hex, state.selectedColor) && (isStar || !starPicked);
         btn.classList.toggle('selected', picked);
         btn.classList.toggle('recommended', isStar || sameHex(hex, rec));
         btn.setAttribute('aria-pressed', picked ? 'true' : 'false');

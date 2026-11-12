@@ -38,5 +38,9 @@ A warm, kid-friendly interactive drawing and part-by-part coloring school design
   - Each coloring step clips brush strokes strictly inside the active body part's boundary (`buildPartClipPath`), highlights the active part with a pulsing golden outline + floating label pill, pulses the recommended color swatch (`★ PICK ME`), tracks coverage `%` (`0% -> 100%`), and offers 4 brushes (**Crayon**, **Marker**, **Watercolor**, **Glitter**) plus a 1-tap `🪣 FILL PART` button.
 - **Phase 3 — Living Critter Dance Party Finale**:
   - Once all 6 drawing steps and 7 coloring parts are complete, your finished Smiling Critter comes alive and dances with rainbow confetti!
-- **26 Pre-Recorded Neural English Voiceover Clips**:
-  - Warm neural teacher narration (`assets/voice/*.mp3`) for every character intro, drawing step, and coloring part with 1-tap `🔊 Hear Teacher` replay.
+- **Free Play Coloring Mode (`?mode=freeplay`)**:
+  - Switch between **Step-by-Step** and **Free Color** right on the Friend Picker cover (`#btn-mode-guided` / `#btn-mode-freeplay`), via the 1-tap in-book palette toggle (`#btn-toggle-freeplay`), or directly via [https://kunruiw1991.github.io/critters-drawing-school/?mode=freeplay](https://kunruiw1991.github.io/critters-drawing-school/?mode=freeplay).
+  - Starts on 100% crisp black-ink Smiling Critters line art (`assets/lineart/*_line_art.png`) with all **17 crayons** and **4 brushes** (`Crayon`, `Marker`, `Watercolor`, `Glitter`) awake.
+  - **Pixel-Exact Automatic Boundary Lock**: Pressing inside any enclosed shape locks the brush to that region (`0 px` out-of-bounds bleed across neighboring regions or background, `0 px` white halo at the black ink outline), preserves per-character Free Play paintings across friend switches and lesson round-trips, and includes a safe 2-tap New Page + 1-tap Undo restore (`#btn-clean-page`).
+- **30 Pre-Recorded Neural English Voiceover Clips**:
+  - Warm neural teacher narration (`assets/voice/*.mp3`, `en-US-AnaNeural`) for every character intro, drawing step, coloring part, and Free Play mode with 1-tap speaker replay.
