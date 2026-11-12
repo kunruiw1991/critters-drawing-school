@@ -237,6 +237,89 @@ img { display: block; -webkit-user-drag: none; }
 .page-star svg { width: 100%; height: auto; }
 html[data-phase="celebrate"] .page-star { transform: rotate(14deg) scale(1); }
 
+/* Top-right pop-up button that appears when a step finishes so the child can finish on paper and tap Next */
+.next-step-popup {
+  position: absolute;
+  z-index: 6;
+  top: clamp(10px, 2vmin, 18px);
+  right: clamp(10px, 2vmin, 18px);
+  height: clamp(50px, 8.2vmin, 66px);
+  padding: 0 clamp(14px, 2.2vmin, 20px) 0 clamp(10px, 1.6vmin, 14px);
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.1vmin, 10px);
+  background: var(--leaf);
+  color: #fff;
+  border: var(--line) solid var(--ink);
+  border-radius: 999px;
+  box-shadow:
+    0 var(--press) 0 var(--ink),
+    0 0 0 5px var(--sun),
+    0 var(--press) 0 5px var(--sun),
+    0 10px 18px rgba(74, 52, 38, 0.28);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-10px) scale(0.76);
+  transition:
+    opacity 0.22s ease,
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    visibility 0s linear 0.28s;
+}
+html[data-step-ready="1"] .next-step-popup {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.2s ease,
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: next-step-pulse 1.35s ease-in-out 0.32s infinite;
+}
+.next-step-popup:active {
+  animation: none;
+  transform: translateY(calc(var(--press) - 1px)) scale(0.97);
+  box-shadow:
+    0 1px 0 var(--ink),
+    0 0 0 4px var(--sun),
+    0 1px 0 4px var(--sun);
+}
+.next-step-popup-check {
+  width: clamp(28px, 4.6vmin, 36px);
+  height: clamp(28px, 4.6vmin, 36px);
+  padding: 3px;
+  display: grid;
+  place-items: center;
+  background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: 50%;
+  flex: none;
+}
+.next-step-popup-check svg { width: 100%; height: 100%; }
+.next-step-popup-label {
+  font-size: clamp(15px, 2.5vmin, 21px);
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #fff;
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 var(--ink);
+  white-space: nowrap;
+}
+.next-step-popup-arrow {
+  width: clamp(28px, 4.8vmin, 38px);
+  height: clamp(28px, 4.8vmin, 38px);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.next-step-popup-arrow svg { width: 100%; height: 100%; }
+
+@keyframes next-step-pulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.05); }
+}
+
 /* ---- step beads on the binding ---- */
 
 .step-trail {

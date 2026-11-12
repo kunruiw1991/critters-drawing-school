@@ -350,6 +350,7 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
   };
   wire('btn-auto-step', 'onAutoStep');
   wire('btn-fill-part', 'onFillPart');
+  wire('btn-next-step-top', 'onNextStep');
   wire('btn-voice-replay', 'onVoice');
   wire('btn-next-char', 'onNextFriend');
   // The whole speech bubble repeats the teacher, not only the round button in it.
@@ -465,10 +466,26 @@ export function createSketchbookUI({ lessons, swatches, handlers }) {
       if (phase === 'celebrate' && before) throwConfetti();
     }
 
+    const stepReady = state.stepWaitingNext && phase !== 'celebrate' ? '1' : '0';
+    if (cache.stepReady !== stepReady) {
+      cache.stepReady = stepReady;
+      root.dataset.stepReady = stepReady;
+    }
+
     const draw = lesson.drawSteps || [];
     const color = lesson.colorSteps || [];
     const cs = color[state.colorStepIndex] || color[0] || {};
     const ds = draw[state.drawStepIndex] || draw[0] || { strokes: [] };
+
+    if (state.stepWaitingNext) {
+      let nextLabel = 'NEXT STEP';
+      if (phase === 'drawing' && state.drawStepIndex + 1 >= draw.length) {
+        nextLabel = 'COLOR IT!';
+      } else if (phase === 'coloring' && state.colorStepIndex + 1 >= color.length) {
+        nextLabel = 'FINISH!';
+      }
+      setText('next-step-popup-label', nextLabel);
+    }
     const rec =
       phase === 'coloring' ? cs.recommendedColor : (lesson.palette && lesson.palette.base) || friendColor(lesson);
 

@@ -176,6 +176,7 @@ export function initDrawingSchoolApp() {
     teacherHoldTimer: 0.45,
     strokeEndTimer: 0,
     teacherDemoDone: false,
+    stepWaitingNext: false, // Pauses at end of each step & pops up top-right Next Step button
     teacherSpeedPxPerSec: 28, // 5-year-old slow hand speed (~28 px/sec)
     lastFrameMs: 0,
     lastPointerMs: 0,
@@ -306,6 +307,7 @@ export function initDrawingSchoolApp() {
     state.strokeTargetDist = 0;
     state.colorStepIndex = 0;
     state.colorCoverage = 0;
+    state.stepWaitingNext = false;
     state.selectedColor = found.palette.base;
     state.selectedTool = 'crayon';
     resetTeacherDemo();
@@ -316,27 +318,9 @@ export function initDrawingSchoolApp() {
     }
   }
 
-  function advanceDrawingSubStroke() {
+  function goToNextDrawingStep() {
     const lesson = getLesson();
-    const ds = lesson.drawSteps[state.drawStepIndex];
-    if (!ds) return;
-    audio.playStepComplete();
-    const lastPts = ds.strokes[state.strokeSubIndex];
-    if (lastPts && lastPts.length) {
-      const endPt = lastPts[lastPts.length - 1];
-      spawnSparkles(endPt[0], endPt[1], '#FFD43B', 14);
-    }
-
-    if (state.strokeSubIndex + 1 < ds.strokes.length) {
-      state.strokeSubIndex += 1;
-      state.strokeProgress = 0;
-      state.strokeTargetDist = 0;
-      resetTeacherDemo();
-      syncUI();
-      return;
-    }
-
-    // Move to next drawing step or transition to Coloring Phase!
+    state.stepWaitingNext = false;
     if (state.drawStepIndex + 1 < lesson.drawSteps.length) {
       state.drawStepIndex += 1;
       state.strokeSubIndex = 0;
@@ -365,6 +349,35 @@ export function initDrawingSchoolApp() {
       audio.speak('color_step_1', setSubtitle);
       syncUI();
     }
+  }
+
+  function advanceDrawingSubStroke() {
+    const lesson = getLesson();
+    const ds = lesson.drawSteps[state.drawStepIndex];
+    if (!ds) return;
+    audio.playStepComplete();
+    const lastPts = ds.strokes[state.strokeSubIndex];
+    if (lastPts && lastPts.length) {
+      const endPt = lastPts[lastPts.length - 1];
+      spawnSparkles(endPt[0], endPt[1], '#FFD43B', 14);
+    }
+
+    if (state.strokeSubIndex + 1 < ds.strokes.length) {
+      state.strokeSubIndex += 1;
+      state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
+      resetTeacherDemo();
+      syncUI();
+      return;
+    }
+
+    // All sub-strokes of the current drawing step are complete!
+    // Pause here and pop up the top-right NEXT STEP button so the child can finish drawing on paper!
+    state.strokeProgress = 1;
+    state.stepWaitingNext = true;
+    const baseSub = SUBTITLE_TEXTS[ds.voiceId] || ds.hint || '';
+    setSubtitle(`${baseSub} — Draw it on your paper, then tap NEXT STEP ➔!`);
+    syncUI();
   }
 
   function fillPartCanvasSolid(partId, colorHex) {
@@ -415,16 +428,27 @@ export function initDrawingSchoolApp() {
     pCtx.restore();
   }
 
-  function advanceColoringStep() {
+  function completeCurrentColoringPart() {
     const lesson = getLesson();
     const cs = lesson.colorSteps[state.colorStepIndex];
     if (!cs) return;
-
-    // Ensure the finished part is 100% cleanly filled inside its lines
     fillPartCanvasSolid(cs.partId, state.selectedColor || cs.recommendedColor);
+    state.colorCoverage = 100;
+    state.stepWaitingNext = true;
     const center = getPartTargetCenter(lesson, cs.partId);
     spawnSparkles(center.x, center.y, state.selectedColor || '#FFD43B', 18);
     audio.playStepComplete();
+    const baseSub = SUBTITLE_TEXTS[cs.voiceId] || cs.hint || '';
+    setSubtitle(`${baseSub} — Color it on your paper, then tap NEXT STEP ➔!`);
+    syncUI();
+  }
+
+  function goToNextColoringStep() {
+    const lesson = getLesson();
+    const cs = lesson.colorSteps[state.colorStepIndex];
+    if (!cs) return;
+    fillPartCanvasSolid(cs.partId, state.selectedColor || cs.recommendedColor);
+    state.stepWaitingNext = false;
 
     if (state.colorStepIndex + 1 < lesson.colorSteps.length) {
       state.colorStepIndex += 1;
@@ -448,6 +472,10 @@ export function initDrawingSchoolApp() {
       audio.speak('celebrate', setSubtitle);
       syncUI();
     }
+  }
+
+  function advanceColoringStep() {
+    completeCurrentColoringPart();
   }
 
   function paintBrushDab(x, y, isAuto = false) {
@@ -590,6 +618,32 @@ export function initDrawingSchoolApp() {
     }
   }
 
+  function confirmAndAdvanceStep() {
+    if (state.phase === 'drawing') {
+      const lesson = getLesson();
+      const ds = lesson.drawSteps[state.drawStepIndex];
+      if (!state.stepWaitingNext) {
+        if (ds && ds.strokes && ds.strokes.length > 0) {
+          state.strokeSubIndex = ds.strokes.length - 1;
+        }
+        state.strokeProgress = 1;
+        advanceDrawingSubStroke();
+        return;
+      }
+      goToNextDrawingStep();
+    } else if (state.phase === 'coloring') {
+      if (!state.stepWaitingNext) {
+        completeCurrentColoringPart();
+        return;
+      }
+      goToNextColoringStep();
+    } else {
+      const idx = CHARACTER_LESSONS.findIndex((c) => c.id === state.characterId);
+      const next = CHARACTER_LESSONS[(idx + 1) % CHARACTER_LESSONS.length];
+      selectCharacter(next.id);
+    }
+  }
+
   function autoCompleteCurrentStep() {
     if (state.phase === 'drawing') {
       const lesson = getLesson();
@@ -598,10 +652,17 @@ export function initDrawingSchoolApp() {
         state.strokeSubIndex = ds.strokes.length - 1;
       }
       state.strokeProgress = 1;
-      advanceDrawingSubStroke();
+      if (state.stepWaitingNext) {
+        goToNextDrawingStep();
+      } else {
+        advanceDrawingSubStroke();
+      }
     } else if (state.phase === 'coloring') {
-      state.colorCoverage = 100;
-      advanceColoringStep();
+      if (state.stepWaitingNext) {
+        goToNextColoringStep();
+      } else {
+        completeCurrentColoringPart();
+      }
     } else {
       // Advance to next character
       const idx = CHARACTER_LESSONS.findIndex((c) => c.id === state.characterId);
@@ -612,6 +673,7 @@ export function initDrawingSchoolApp() {
 
   function jumpToPhase(targetPhase, stepIdx = 0) {
     const lesson = getLesson();
+    state.stepWaitingNext = false;
     if (targetPhase === 'drawing') {
       clearPartCanvases();
       state.phase = 'drawing';
@@ -763,8 +825,8 @@ export function initDrawingSchoolApp() {
     state.danceTime += dt;
 
     // Automatic slow 5-year-old pencil glides across each stroke (~28 px/sec along true pixel arc-length)
-    // and advances automatically, while also allowing the child to trace along with their finger!
-    if (state.phase === 'drawing') {
+    // and pauses when the step finishes so the child can finish drawing on paper and tap NEXT STEP!
+    if (state.phase === 'drawing' && !state.stepWaitingNext) {
       const dsA = lesson.drawSteps[state.drawStepIndex];
       const ptsA = dsA?.strokes?.[state.strokeSubIndex];
       const totalA = getPolylineTotalLength(ptsA);
@@ -807,7 +869,7 @@ export function initDrawingSchoolApp() {
           }
         }
       }
-    } else if (state.phase === 'coloring') {
+    } else if (state.phase === 'coloring' && !state.stepWaitingNext) {
       if (!state.pointerDown) {
         if (state.teacherHoldTimer > 0) {
           state.teacherHoldTimer = Math.max(0, state.teacherHoldTimer - dt);
@@ -858,8 +920,8 @@ export function initDrawingSchoolApp() {
       }
     }
 
-    // 2. If in Coloring Phase, draw a calm spotlight outline around the ACTIVE part
-    if (state.phase === 'coloring') {
+    // 2. If in Coloring Phase (and not yet waiting for Next Step), draw a calm spotlight outline around the ACTIVE part
+    if (state.phase === 'coloring' && !state.stepWaitingNext) {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
         ctx.save();
@@ -891,7 +953,9 @@ export function initDrawingSchoolApp() {
 
     // Add gleaming white eye sparkle catchlights once Step 6 (Velvet Smile & Eye Sparkles) is filled
     if (
-      (state.phase === 'celebrate' || (state.phase === 'coloring' && state.colorStepIndex > 5)) &&
+      (state.phase === 'celebrate' ||
+        (state.phase === 'coloring' &&
+          (state.colorStepIndex > 5 || (state.colorStepIndex === 5 && state.stepWaitingNext)))) &&
       lesson.catchlights
     ) {
       ctx.fillStyle = '#FFFFFF';
@@ -921,26 +985,30 @@ export function initDrawingSchoolApp() {
         // Active sub-stroke guide path + automatically drawn ink + slow teacher pencil (no green start icon!)
         const activePts = ds.strokes[state.strokeSubIndex];
         if (activePts && activePts.length >= 2) {
-          drawStrokePolyline(ctx, activePts, 1.0, {
-            color: 'rgba(112, 72, 232, 0.36)',
-            width: inkWidth + 2.5,
-            dash: [14, 12],
-            dashOffset: 0,
-          });
+          if (!state.stepWaitingNext) {
+            drawStrokePolyline(ctx, activePts, 1.0, {
+              color: 'rgba(112, 72, 232, 0.36)',
+              width: inkWidth + 2.5,
+              dash: [14, 12],
+              dashOffset: 0,
+            });
+          }
 
           drawStrokePolyline(ctx, activePts, state.strokeProgress, {
             color: '#231B18',
-            width: inkWidth + 0.6,
+            width: state.stepWaitingNext ? inkWidth : inkWidth + 0.6,
           });
 
-          const pencilPt = samplePointOnPolyline(activePts, state.strokeProgress);
-          renderTeacherPencil(ctx, pencilPt[0], pencilPt[1]);
+          if (!state.stepWaitingNext) {
+            const pencilPt = samplePointOnPolyline(activePts, state.strokeProgress);
+            renderTeacherPencil(ctx, pencilPt[0], pencilPt[1]);
+          }
         }
       }
     }
 
     // 5. If in Coloring Phase, draw a friendly floating pointer pill AND automatic slow crayon coloring
-    if (state.phase === 'coloring') {
+    if (state.phase === 'coloring' && !state.stepWaitingNext) {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
         const target = getPartTargetCenter(lesson, cs.partId);
@@ -974,7 +1042,7 @@ export function initDrawingSchoolApp() {
           if (state.teacherHoldTimer <= 0 && demoT > 0) {
             paintBrushDab(sweepPt[0], sweepPt[1], true);
           }
-          if (state.phase === 'coloring') {
+          if (state.phase === 'coloring' && !state.stepWaitingNext) {
             renderTeacherPencil(ctx, sweepPt[0], sweepPt[1]);
             if (demoT >= 0.995) {
               advanceColoringStep();
@@ -1012,11 +1080,33 @@ export function initDrawingSchoolApp() {
 
   // Wire DOM controls: the markup and listeners live in ./ui.js, the game supplies the actions.
   const replayTeacherVoice = () => {
-    if (
-      (state.phase === 'drawing' && state.strokeProgress === 0) ||
-      (state.phase === 'coloring' && state.colorCoverage === 0)
-    ) {
+    const lesson = getLesson();
+    if (state.phase === 'drawing') {
+      state.stepWaitingNext = false;
+      state.strokeSubIndex = 0;
+      state.strokeProgress = 0;
+      state.strokeTargetDist = 0;
       resetTeacherDemo();
+      const ds = lesson.drawSteps[state.drawStepIndex];
+      if (ds) audio.speak(ds.voiceId, setSubtitle);
+      syncUI();
+      return;
+    }
+    if (state.phase === 'coloring') {
+      const cs = lesson.colorSteps[state.colorStepIndex];
+      if (cs) {
+        const pCanvas = partCanvases[cs.partId];
+        if (pCanvas) pCanvas.getContext('2d').clearRect(0, 0, CANVAS_W, CANVAS_H);
+        delete partFilledColors[cs.partId];
+      }
+      state.stepWaitingNext = false;
+      state.colorCoverage = 0;
+      state.lastDabPt = null;
+      state.paintedCells = new Set();
+      resetTeacherDemo();
+      if (cs) audio.speak(cs.voiceId, setSubtitle);
+      syncUI();
+      return;
     }
     audio.replayLast(setSubtitle);
   };
@@ -1042,14 +1132,8 @@ export function initDrawingSchoolApp() {
         syncUI();
       },
       onAutoStep: () => autoCompleteCurrentStep(),
-      onFillPart: () => {
-        if (state.phase === 'coloring') {
-          state.colorCoverage = 100;
-          advanceColoringStep();
-        } else {
-          autoCompleteCurrentStep();
-        }
-      },
+      onFillPart: () => autoCompleteCurrentStep(),
+      onNextStep: () => confirmAndAdvanceStep(),
       onVoice: replayTeacherVoice,
       onNextFriend: goToNextFriend,
     },
@@ -1099,6 +1183,7 @@ export function initDrawingSchoolApp() {
         teacherPhase: state.teacherPhase,
         teacherHoldTimer: state.teacherHoldTimer,
         teacherDemoDone: state.teacherDemoDone,
+        stepWaitingNext: state.stepWaitingNext,
         teacherSpeedPxPerSec: state.teacherSpeedPxPerSec,
         colorStepIndex: state.colorStepIndex,
         colorStepCount: lesson.colorSteps.length,
@@ -1121,6 +1206,11 @@ export function initDrawingSchoolApp() {
     autoCompleteCurrentStep() {
       ui.closePicker();
       autoCompleteCurrentStep();
+      return this.getState();
+    },
+    confirmNextStep() {
+      ui.closePicker();
+      confirmAndAdvanceStep();
       return this.getState();
     },
     jumpToPhase(phase, idx = 0) {
