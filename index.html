@@ -1,602 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-phase="drawing" data-picker="open" data-picker-closable="0">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Smiling Critters Drawing & Step-by-Step Coloring School! 🎨🐾</title>
-  <style>
-    :root {
-      --bg-cream: #FFF8EE;
-      --card-bg: #FFFFFF;
-      --ink-dark: #2B1E16;
-      --ink-soft: #6C584C;
-      --accent-purple: #7950F2;
-      --accent-orange: #FF922B;
-      --accent-gold: #FFD43B;
-      --accent-green: #40C057;
-      --border-warm: #E9D8C4;
-    }
-
-    * {
-      box-sizing: border-box;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      font-family: 'Segoe UI', 'Fredoka', 'Nunito', system-ui, -apple-system, sans-serif;
-      background: radial-gradient(circle at 50% 0%, #FFFDF9 0%, #FCEBD5 100%);
-      color: var(--ink-dark);
-    }
-
-    .app-shell {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      width: 100%;
-      max-width: 100vw;
-      height: 100vh;
-      padding: 8px 12px;
-      gap: 8px;
-      overflow: hidden;
-    }
-
-    /* Top Character Carousel Strip */
-    .top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 0;
-      width: 100%;
-      background: var(--card-bg);
-      border: 3px solid var(--border-warm);
-      border-radius: 20px;
-      padding: 6px 12px;
-      box-shadow: 0 4px 12px rgba(92, 61, 46, 0.08);
-    }
-
-    .brand-title {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 900;
-      font-size: 16px;
-      color: #5F3DC4;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    .character-strip {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-      flex: 1;
-      overflow-x: auto;
-      scrollbar-width: none;
-      padding: 2px 4px;
-    }
-    .character-strip::-webkit-scrollbar {
-      display: none;
-    }
-
-    .char-pill {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 6px 11px;
-      min-height: 44px;
-      border-radius: 999px;
-      border: 2.5px solid #E5DBFF;
-      background: #F8F0FC;
-      color: var(--ink-dark);
-      font-weight: 800;
-      font-size: 13px;
-      cursor: pointer;
-      transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
-      white-space: nowrap;
-    }
-    .char-pill:hover {
-      transform: translateY(-2px);
-    }
-    .char-pill.active {
-      background: linear-gradient(135deg, #7950F2 0%, #9775FA 100%);
-      color: #FFFFFF;
-      border-color: #FFD43B;
-      box-shadow: 0 4px 10px rgba(121, 80, 242, 0.35);
-    }
-    .char-pill.done::after {
-      content: '⭐';
-      margin-left: 3px;
-      font-size: 12px;
-    }
-    .char-emoji {
-      font-size: 18px;
-    }
-
-    /* Main 3-Column Studio Workspace */
-    .workspace {
-      display: grid;
-      grid-template-columns: 220px minmax(0, 1fr) 235px;
-      gap: 10px;
-      min-height: 0;
-      min-width: 0;
-      width: 100%;
-      align-items: stretch;
-    }
-
-    /* Left Column: 13-Step Guided Ladder (6 Draw Steps + 7 Color Steps) */
-    .panel-card {
-      background: var(--card-bg);
-      border: 3px solid var(--border-warm);
-      border-radius: 22px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      box-shadow: 0 6px 16px rgba(92, 61, 46, 0.08);
-      min-height: 0;
-    }
-
-    .panel-header {
-      font-size: 14px;
-      font-weight: 900;
-      color: #5F3DC4;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      padding: 2px 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .step-ladder {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      overflow-y: auto;
-      scrollbar-width: none;
-      flex: 1;
-    }
-    .step-ladder::-webkit-scrollbar {
-      display: none;
-    }
-
-    .ladder-step {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 12px;
-      border: 2px solid #F1ECE4;
-      background: #FAF6F0;
-      color: var(--ink-dark);
-      font-size: 12px;
-      font-weight: 800;
-      text-align: left;
-      cursor: pointer;
-      transition: all 0.14s ease;
-    }
-    .ladder-step.current {
-      background: #FFF3BF;
-      border-color: #F59F00;
-      transform: scale(1.02);
-      box-shadow: 0 3px 8px rgba(245, 159, 0, 0.22);
-    }
-    .ladder-step.done {
-      background: #EBFBEE;
-      border-color: #69DB7C;
-      color: #2B8A3E;
-    }
-
-    .step-badge {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: #7950F2;
-      color: #FFFFFF;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 900;
-      flex-shrink: 0;
-      border: 1.5px solid rgba(0,0,0,0.12);
-    }
-    .ladder-step.done .step-badge {
-      background: #40C057 !important;
-      color: #FFFFFF;
-    }
-    .step-text {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    /* Center Column: Step Banner + Interactive Sketchbook Easel */
-    .easel-column {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-height: 0;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .step-banner {
-      width: 100%;
-      background: linear-gradient(135deg, #5F3DC4 0%, #7950F2 100%);
-      color: #FFFFFF;
-      border-radius: 20px;
-      padding: 8px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      box-shadow: 0 6px 14px rgba(95, 61, 196, 0.24);
-    }
-
-    .step-banner-left {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .phase-badge {
-      display: inline-block;
-      background: #FFD43B;
-      color: #2B1E16;
-      font-weight: 900;
-      font-size: 11px;
-      padding: 2px 9px;
-      border-radius: 999px;
-      width: fit-content;
-    }
-
-    .step-title {
-      font-size: 18px;
-      font-weight: 900;
-    }
-
-    .step-hint {
-      font-size: 13px;
-      color: #E5DBFF;
-      font-weight: 700;
-    }
-
-    .step-meter-box {
-      min-width: 150px;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-    }
-
-    .step-meter-track {
-      width: 145px;
-      height: 14px;
-      background: rgba(255, 255, 255, 0.24);
-      border-radius: 999px;
-      overflow: hidden;
-      border: 2px solid rgba(255, 255, 255, 0.5);
-    }
-
-    .step-meter-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #FFD43B 0%, #51CF66 100%);
-      transition: width 0.15s ease;
-    }
-
-    .step-meter-label {
-      font-size: 12px;
-      font-weight: 900;
-      color: #FFD43B;
-    }
-
-    .canvas-frame {
-      flex: 1;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 0;
-    }
-
-    #easel-canvas {
-      max-width: 100%;
-      max-height: 100%;
-      aspect-ratio: 800 / 640;
-      background: #FFFDF7;
-      border: 6px solid #D0BFFF;
-      border-radius: 26px;
-      box-shadow: 0 12px 28px rgba(59, 35, 20, 0.14);
-      cursor: crosshair;
-      touch-action: none;
-    }
-
-    /* Right Column: Color Palette Swatches & 4 Kid Brushes */
-    .swatch-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 7px;
-      padding: 2px;
-    }
-
-    .swatch-btn {
-      height: 38px;
-      border-radius: 12px;
-      border: 3px solid rgba(0, 0, 0, 0.14);
-      cursor: pointer;
-      position: relative;
-      transition: transform 0.12s ease, box-shadow 0.12s ease;
-    }
-    .swatch-btn.selected {
-      transform: scale(1.07);
-      border-color: #2B1E16;
-      box-shadow: 0 0 0 3px #FFD43B;
-    }
-    .swatch-btn.recommended::after {
-      content: '★ PICK ME';
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 900;
-      color: #2B1E16;
-      background: rgba(255, 255, 255, 0.72);
-      border-radius: 9px;
-      animation: pulseBadge 1.1s infinite alternate;
-    }
-
-    @keyframes pulseBadge {
-      from { opacity: 0.75; }
-      to { opacity: 1.0; }
-    }
-
-    .tool-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 7px;
-      margin-top: 4px;
-    }
-
-    .tool-btn {
-      min-height: 54px;
-      border-radius: 14px;
-      border: 2.5px solid #E9D8C4;
-      background: #FAF6F0;
-      color: var(--ink-dark);
-      font-weight: 900;
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      cursor: pointer;
-    }
-    .tool-btn.active {
-      background: #FFF3BF;
-      border-color: #F59F00;
-      box-shadow: 0 3px 8px rgba(245, 159, 0, 0.25);
-    }
-
-    /* Bottom Action Bar with >= 72px Kid-Friendly Buttons & Voice Subtitle Pill */
-    .bottom-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      background: var(--card-bg);
-      border: 3px solid var(--border-warm);
-      border-radius: 22px;
-      padding: 6px 14px;
-      box-shadow: 0 4px 12px rgba(92, 61, 46, 0.08);
-    }
-
-    .voice-pill {
-      flex: 1;
-      min-height: 60px;
-      background: #21183C;
-      color: #FFF9DB;
-      border: 3px solid #FFD43B;
-      border-radius: 18px;
-      padding: 8px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 15px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-
-    .action-buttons {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .big-kid-btn {
-      min-width: 128px;
-      min-height: 62px;
-      border-radius: 18px;
-      border: 3px solid rgba(0, 0, 0, 0.15);
-      font-size: 14px;
-      font-weight: 900;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      padding: 6px 14px;
-      color: #FFFFFF;
-      box-shadow: 0 5px 0 rgba(0, 0, 0, 0.16);
-      transition: transform 0.1s ease;
-    }
-    .big-kid-btn:active {
-      transform: translateY(3px);
-    }
-    .btn-magic {
-      background: linear-gradient(180deg, #51CF66 0%, #2B8A3E 100%);
-    }
-    .btn-fill {
-      background: linear-gradient(180deg, #FF922B 0%, #E8590C 100%);
-    }
-    .btn-voice {
-      background: linear-gradient(180deg, #339AF0 0%, #1864AB 100%);
-    }
-    .btn-next {
-      background: linear-gradient(180deg, #9775FA 0%, #5F3DC4 100%);
-    }
-
-    @media (max-width: 900px), (orientation: portrait) {
-      .app-shell {
-        grid-template-rows: auto 1fr auto;
-        padding: 6px;
-        gap: 6px;
-      }
-      .workspace {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto minmax(0, 1fr) auto;
-        gap: 6px;
-      }
-      .step-ladder {
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-      }
-      .ladder-step {
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-      .swatch-grid {
-        grid-template-columns: repeat(6, 1fr);
-      }
-      .tool-grid {
-        grid-template-columns: repeat(4, 1fr);
-      }
-      .bottom-bar {
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-      .big-kid-btn {
-        min-width: 100px;
-        min-height: 52px;
-        font-size: 12px;
-      }
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#F8ECD2" />
+  <meta name="color-scheme" content="light" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Critters Draw" />
+  <title>Smiling Critters Drawing School</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 4l5.900 13.200 14.300 1.500-10.700 9.600 3 14.100L24 35.200 11.500 42.400l3-14.100L3.800 18.700l14.300-1.500z' fill='%23FFCB45' stroke='%234A3426' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="src/ui.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <!-- Top Character Carousel -->
-    <header class="top-bar">
-      <div class="brand-title">🎨 Smiling Critters Art School</div>
-      <div class="character-strip" id="character-strip"></div>
-    </header>
+  <div class="app" id="app">
 
-    <!-- Main 3-Column Studio -->
-    <main class="workspace">
-      <!-- Left: 6 Drawing Steps + 7 Part-by-Part Coloring Steps Ladder -->
-      <aside class="panel-card">
-        <div class="panel-header">
-          <span>📋 13 Guided Steps</span>
-          <span>6✏️ + 7🎨</span>
-        </div>
-        <div class="step-ladder" id="step-ladder"></div>
-      </aside>
+    <!-- The desk: sketchbook, teacher, crayons -->
+    <main class="desk" id="desk">
 
-      <!-- Center: Active Step Instruction Banner + Interactive Canvas Easel -->
-      <section class="easel-column">
-        <div class="step-banner">
-          <div class="step-banner-left">
-            <span class="phase-badge" id="phase-badge">✏️ DRAW STEP 1 OF 6</span>
-            <div class="step-title" id="step-title">Step 1: Big Round Head</div>
-            <div class="step-hint" id="step-hint">Start at the green dot and trace the big round head!</div>
-          </div>
-          <div class="step-meter-box">
-            <div class="step-meter-track">
-              <div class="step-meter-fill" id="step-meter-fill"></div>
-            </div>
-            <div class="step-meter-label" id="step-meter-label">0% Traced</div>
-          </div>
-        </div>
-
-        <div class="canvas-frame">
-          <canvas id="easel-canvas" width="800" height="640"></canvas>
+      <section class="book" aria-label="Sketchbook">
+        <nav class="binding" aria-label="Steps">
+          <div class="step-trail" id="step-ladder"></div>
+        </nav>
+        <div class="paper">
+          <canvas id="easel-canvas" width="800" height="640" aria-label="Drawing paper"></canvas>
+          <span class="page-star" data-ico="star" aria-hidden="true"></span>
         </div>
       </section>
 
-      <!-- Right: Color Swatch Palette & Brush Tools -->
-      <aside class="panel-card">
-        <div class="panel-header">
-          <span>🖍️ Part Colors</span>
-          <span>★ Auto-Hint</span>
-        </div>
-        <div class="swatch-grid" id="swatch-grid"></div>
+      <button type="button" class="friend-btn" id="btn-open-picker" aria-label="Choose a friend">
+        <span class="friend-face" id="friend-face"></span>
+        <span class="friend-swap" data-ico="friends"></span>
+      </button>
 
-        <div class="panel-header" style="margin-top: 6px;">
-          <span>🖌️ Coloring Brushes</span>
-        </div>
-        <div class="tool-grid">
-          <button class="tool-btn active" data-tool="crayon" id="btn-tool-crayon">
-            <span style="font-size:20px">🖍️</span>
-            <span>Crayon</span>
-          </button>
-          <button class="tool-btn" data-tool="marker" id="btn-tool-marker">
-            <span style="font-size:20px">🖊️</span>
-            <span>Marker</span>
-          </button>
-          <button class="tool-btn" data-tool="watercolor" id="btn-tool-watercolor">
-            <span style="font-size:20px">🎨</span>
-            <span>Watercolor</span>
-          </button>
-          <button class="tool-btn" data-tool="glitter" id="btn-tool-glitter">
-            <span style="font-size:20px">✨</span>
-            <span>Glitter Brush</span>
-          </button>
-        </div>
-      </aside>
+      <div class="bubble voice-pill" id="voice-subtitle-pill">
+        <button type="button" class="voice-btn" id="btn-voice-replay" data-ico="speaker" aria-label="Hear the teacher again"></button>
+        <p class="bubble-text" id="voice-subtitle-text">Welcome to Smiling Critters Drawing &amp; Coloring School!</p>
+      </div>
+
+      <!-- One helper spot: magic wand while drawing, paint bucket while colouring, next friend at the party -->
+      <div class="helper">
+        <button type="button" class="helper-btn helper-wand" id="btn-auto-step" data-ico="wand" aria-label="Magic helper: draw this step for me"></button>
+        <button type="button" class="helper-btn helper-bucket" id="btn-fill-part" data-ico="bucket" aria-label="Paint bucket: fill this part for me"></button>
+        <button type="button" class="helper-btn helper-next" id="btn-next-char" aria-label="Next friend">
+          <span class="next-face" id="next-face"></span>
+          <span data-ico="next"></span>
+        </button>
+      </div>
+
+      <div class="crayons" id="swatch-grid" role="group" aria-label="Crayons"></div>
+
+      <div class="brushes" role="group" aria-label="Brushes">
+        <button type="button" class="tool-btn active" data-tool="crayon" id="btn-tool-crayon" data-ico="crayon" aria-label="Crayon"></button>
+        <button type="button" class="tool-btn" data-tool="marker" id="btn-tool-marker" data-ico="marker" aria-label="Marker"></button>
+        <button type="button" class="tool-btn" data-tool="watercolor" id="btn-tool-watercolor" data-ico="watercolor" aria-label="Watercolor brush"></button>
+        <button type="button" class="tool-btn" data-tool="glitter" id="btn-tool-glitter" data-ico="glitter" aria-label="Glitter brush"></button>
+      </div>
+
+      <!-- Words for grown-ups and screen readers; the child follows the pictures and the voice -->
+      <div class="sr-only" role="status">
+        <span id="phase-badge">DRAW STEP 1 OF 6</span>
+        <span id="step-title"></span>
+        <span id="step-hint"></span>
+      </div>
+      <span class="sr-only" id="step-meter-label" aria-hidden="true">0% Traced</span>
     </main>
 
-    <!-- Bottom Kid Action Bar -->
-    <footer class="bottom-bar">
-      <div class="voice-pill" id="voice-subtitle-pill" onclick="window.__DRAW_SCHOOL__?.replayVoice()">
-        <span style="font-size:26px">🔊</span>
-        <span id="voice-subtitle-text">Welcome to Smiling Critters Drawing & Coloring School!</span>
+    <!-- Cover page: choose a friend to draw -->
+    <section class="picker" id="friend-picker" aria-label="Choose a friend to draw">
+      <div class="picker-card">
+        <header class="picker-head">
+          <h1 class="logo" aria-label="Smiling Critters Drawing School">
+            <span class="logo-top" aria-hidden="true">Smiling Critters</span>
+            <span class="logo-main" aria-hidden="true">
+              <i style="--lc:#FF7F7F;--lr:-5deg">D</i><i style="--lc:#FFCB45;--lr:4deg;--ly:2px">r</i><i style="--lc:#5EC27F;--lr:-3deg">a</i><i style="--lc:#7CC4F5;--lr:5deg;--ly:-2px">w</i><i style="--lc:#B58CF2;--lr:-4deg">i</i><i style="--lc:#FF8FA3;--lr:3deg;--ly:2px">n</i><i style="--lc:#FFA24C;--lr:-5deg">g</i><i class="sp"></i><i style="--lc:#5EC27F;--lr:4deg">S</i><i style="--lc:#7CC4F5;--lr:-4deg;--ly:2px">c</i><i style="--lc:#FF7F7F;--lr:3deg">h</i><i style="--lc:#FFCB45;--lr:-3deg;--ly:-2px">o</i><i style="--lc:#B58CF2;--lr:5deg">o</i><i style="--lc:#FF8FA3;--lr:-4deg">l</i>
+            </span>
+          </h1>
+          <button type="button" class="round-btn" id="btn-cover-voice" data-ico="speaker" aria-label="Hear the teacher"></button>
+          <button type="button" class="round-btn" id="btn-close-picker" data-ico="close" aria-label="Back to my drawing"></button>
+        </header>
+        <div class="friend-grid" id="character-strip"></div>
       </div>
-
-      <div class="action-buttons">
-        <button class="big-kid-btn btn-magic" id="btn-auto-step">
-          <span style="font-size:20px">✨</span>
-          <span>AUTO STEP</span>
-        </button>
-        <button class="big-kid-btn btn-fill" id="btn-fill-part">
-          <span style="font-size:20px">🪣</span>
-          <span>FILL PART</span>
-        </button>
-        <button class="big-kid-btn btn-voice" id="btn-voice-replay">
-          <span style="font-size:20px">🗣️</span>
-          <span>TEACHER VOICE</span>
-        </button>
-        <button class="big-kid-btn btn-next" id="btn-next-char">
-          <span style="font-size:20px">🐾</span>
-          <span>NEXT FRIEND</span>
-        </button>
-      </div>
-    </footer>
+    </section>
   </div>
 
+  <noscript><p style="position:fixed;left:0;right:0;bottom:12px;margin:0;text-align:center;font:700 16px sans-serif;color:#4A3426">Please turn on JavaScript to draw with the Smiling Critters.</p></noscript>
   <script type="module">
     import { initDrawingSchoolApp } from './src/app.js';
     window.addEventListener('DOMContentLoaded', () => {

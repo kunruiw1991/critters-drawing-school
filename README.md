@@ -10,7 +10,7 @@ A warm, kid-friendly interactive drawing and part-by-part coloring school design
 
 ## ✨ Key Features
 
-- **10 Playable Character Lessons**:
+- **8 Playable Character Lessons** (each traced from its own Smiling Critters line art in `assets/lineart/`, vectorized by `tools/extract_lineart.py`; sketchbook UI in `src/ui.js` + `src/ui.css`):
   1. **CatNap** (`🌙` Purple Moon Cat)
   2. **DogDay** (`☀️` Sunny Leader Pup)
   3. **Bobby BearHug** (`❤️` Caring Red Bear)
@@ -19,8 +19,6 @@ A warm, kid-friendly interactive drawing and part-by-part coloring school design
   6. **PickyPiggy** (`🍎` Healthy Apple Piggy)
   7. **Bubba Bubbaphant** (`💡` Bright Idea Elephant)
   8. **KickinChicken** (`⭐` Cool Star Chick)
-  9. **Rainbow Friend** (`🌈` Starter Easy Lesson)
-  10. **Berry Cupcake Bear** (`🧁` Starter Sweet Lesson)
 - **Phase 1 — 6 Simple Guided Drawing Steps (`Draw 1–6`)**:
   - **Step 1**: Draw the Big Round Head
   - **Step 2**: Draw Signature Ears, Horn, or Feathers

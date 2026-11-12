@@ -3,6 +3,14 @@
 
 import { CHARACTER_LESSONS, SWATCH_PALETTE } from './characters.js';
 import { createAudioSystem } from './audio.js';
+import {
+  createSketchbookUI,
+  paintFinishStar,
+  paintLabelPill,
+  paintPaper,
+  paintStartDot,
+  paintTeacherPencil,
+} from './ui.js';
 
 const STORAGE_KEY = 'critters_drawing_school_v1';
 const CANVAS_W = 800;
@@ -12,17 +20,17 @@ const SUBTITLE_TEXTS = {
   welcome: 'Welcome to Smiling Critters Drawing & Coloring School! Pick a friend to draw step by step!',
   draw_step_1: 'Drawing Step 1/6: Trace from the GREEN DOT to draw the big round head!',
   draw_step_2: 'Drawing Step 2/6: Awesome! Now trace the cute ears on top of the head!',
-  draw_step_3: 'Drawing Step 3/6: Draw the two big oval eyes, muzzle patch, and cute nose!',
-  draw_step_4: 'Drawing Step 4/6: Draw a giant happy Smiling Critter grin and cheek circles!',
-  draw_step_5: 'Drawing Step 5/6: Trace the cozy round tummy, waving arms, and paws!',
+  draw_step_3: 'Drawing Step 3/6: Draw the two big expressive eyes and cute nose!',
+  draw_step_4: 'Drawing Step 4/6: Draw a giant happy Smiling Critter grin and tongue!',
+  draw_step_5: 'Drawing Step 5/6: Trace the cozy tummy, arms, hands, and paws!',
   draw_step_6: 'Drawing Step 6/6: Last drawing step! Trace the magic necklace charm and tail!',
   draw_complete: 'Hooray! Drawing complete! Now let us learn how to color each part step by step!',
-  color_step_1: 'Color Step 1/7 (Main Fur & Body): Brush inside the glowing lines to color the head, body & tail!',
-  color_step_2: 'Color Step 2/7 (Inner Ears & Muzzle): Pick the soft lighter color and fill inside the ears & face!',
-  color_step_3: 'Color Step 3/7 (Cozy Tummy Patch): Color the round belly oval and collar strap nice and neat!',
-  color_step_4: 'Color Step 4/7 (Rosy Cheeks & Smile): Brush sweet pink onto both cheeks and the happy tongue!',
-  color_step_5: 'Color Step 5/7 (Magic Necklace Charm): Color the special pendant with bright golden shine!',
-  color_step_6: 'Color Step 6/7 (3D Shading & Eye Sparkles): Add soft shadow under the chin & sparkles in the eyes!',
+  color_step_1: 'Color Step 1/7 (Main Fur & Body): Brush inside the glowing lines to color the main coat!',
+  color_step_2: 'Color Step 2/7 (Ears & Accents): Pick the recommended color and fill inside the lines!',
+  color_step_3: 'Color Step 3/7 (Cozy Tummy & Paws): Color the tummy, paws, and collar nice and neat!',
+  color_step_4: 'Color Step 4/7 (Happy Tongue & Details): Brush bright color onto the happy tongue!',
+  color_step_5: 'Color Step 5/7 (Magic Necklace Charm): Color the special pendant with bright shine!',
+  color_step_6: 'Color Step 6/7 (Velvet Smile & Eye Sparkles): Fill the wide smile and pupils so the eyes sparkle!',
   color_step_7: 'Color Step 7/7 (Background & Stickers): Color the sunny sky around your friend and add sparkles!',
   celebrate: 'Bravo, little artist! Your Smiling Critter drawing is alive and dancing!',
   pick_catnap: "Let's draw and color CatNap the Purple Moon Kitty!",
@@ -33,8 +41,6 @@ const SUBTITLE_TEXTS = {
   pick_pickypiggy: "Let's draw and color PickyPiggy the Happy Pink Piggy!",
   pick_bubba: "Let's draw and color Bubba Bubbaphant the Clever Blue Elephant!",
   pick_kickin: "Let's draw and color KickinChicken the Cool Star Chicken!",
-  pick_rainbow: "Let's draw and color Rainbow Friend!",
-  pick_cupcake: "Let's draw and color Berry Cupcake Bear!",
 };
 
 function tracePointsToPath(ctx, pts, close = false) {
@@ -46,83 +52,30 @@ function tracePointsToPath(ctx, pts, close = false) {
   if (close) ctx.closePath();
 }
 
-function addEllipseSubpath(ctx, cx, cy, rx, ry, rot = 0) {
-  ctx.moveTo(cx + Math.cos(rot) * rx, cy + Math.sin(rot) * rx);
-  ctx.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2);
-  ctx.closePath();
-}
-
 function buildPartClipPath(ctx, lesson, partId) {
   ctx.beginPath();
+  const rings = lesson?.regions?.[partId];
+  if (rings && rings.length > 0) {
+    for (const ring of rings) {
+      tracePointsToPath(ctx, ring, true);
+    }
+    return;
+  }
   if (partId === 'background_frame') {
-    ctx.roundRect(22, 22, CANVAS_W - 44, CANVAS_H - 44, 20);
-    return;
-  }
-  if (partId === 'main_fur') {
-    for (const s of lesson.ears.outer) {
-      tracePointsToPath(ctx, s, true);
-    }
-    addEllipseSubpath(ctx, 400, 200, 136, 104, 0);
-    addEllipseSubpath(ctx, 400, 422, 114, 116, 0);
-    addEllipseSubpath(ctx, 256, 396, 48, 26, -0.35);
-    addEllipseSubpath(ctx, 544, 396, 48, 26, 0.35);
-    addEllipseSubpath(ctx, 342, 538, 42, 26, 0);
-    addEllipseSubpath(ctx, 458, 538, 42, 26, 0);
-    addEllipseSubpath(ctx, 548, 442, 48, 24, -0.45);
-    return;
-  }
-  if (partId === 'inner_ears_muzzle') {
-    for (const s of lesson.ears.inner) {
-      tracePointsToPath(ctx, s, true);
-    }
-    addEllipseSubpath(ctx, 400, 244, 68, 40, 0);
-    return;
-  }
-  if (partId === 'tummy_collar') {
-    addEllipseSubpath(ctx, 400, 434, 74, 76, 0);
-    ctx.roundRect(312, 310, 176, 24, 12);
-    return;
-  }
-  if (partId === 'cheeks_mouth') {
-    addEllipseSubpath(ctx, 296, 222, 20, 14, 0);
-    addEllipseSubpath(ctx, 504, 222, 20, 14, 0);
-    ctx.moveTo(348, 238);
-    ctx.quadraticCurveTo(400, 260, 452, 238);
-    ctx.quadraticCurveTo(400, 288, 348, 238);
-    ctx.closePath();
-    return;
-  }
-  if (partId === 'magic_pendant') {
-    addEllipseSubpath(ctx, 400, 382, 34, 34, 0);
-    return;
-  }
-  if (partId === 'shading_sparkles') {
-    addEllipseSubpath(ctx, 400, 298, 92, 18, 0);
-    addEllipseSubpath(ctx, 400, 504, 84, 22, 0);
-    addEllipseSubpath(ctx, 342, 544, 30, 14, 0);
-    addEllipseSubpath(ctx, 458, 544, 30, 14, 0);
-    return;
+    ctx.roundRect(20, 20, CANVAS_W - 40, CANVAS_H - 40, 20);
   }
 }
 
-function getPartTargetCenter(partId) {
-  switch (partId) {
-    case 'main_fur':
-      return { x: 400, y: 155, label: 'HEAD & BODY FUR' };
-    case 'inner_ears_muzzle':
-      return { x: 400, y: 228, label: 'INNER EARS & MUZZLE' };
-    case 'tummy_collar':
-      return { x: 400, y: 434, label: 'TUMMY PATCH & COLLAR' };
-    case 'cheeks_mouth':
-      return { x: 400, y: 266, label: 'CHEEKS & HAPPY GRIN' };
-    case 'magic_pendant':
-      return { x: 400, y: 382, label: 'MAGIC PENDANT CHARM' };
-    case 'shading_sparkles':
-      return { x: 400, y: 304, label: '3D SHADING & EYE SPARKLES' };
-    case 'background_frame':
-    default:
-      return { x: 155, y: 120, label: 'SUNNY SKY & STICKERS' };
+function getPartTargetCenter(lesson, partId) {
+  const cs = lesson?.colorSteps?.find((s) => s.partId === partId);
+  const pt = cs?.targetCenter || lesson?.targets?.[partId];
+  const shortLabel = cs?.title
+    ? cs.title.replace(/^Color Step \d+\/\d+:\s*/i, '').toUpperCase()
+    : partId.replace(/_/g, ' ').toUpperCase();
+  if (pt && pt.length >= 2) {
+    return { x: pt[0], y: pt[1], label: shortLabel };
   }
+  return { x: 400, y: 320, label: shortLabel };
 }
 
 export function initDrawingSchoolApp() {
@@ -176,8 +129,8 @@ export function initDrawingSchoolApp() {
     subtitleText: SUBTITLE_TEXTS.welcome,
   };
 
-  // Area-based coloring coverage: a coarse grid of cells whose centers lie inside the active part.
-  const COVER_CELL = 14;
+  // Area-based coloring coverage: an 8px grid of cells whose centers lie inside the active 'evenodd' part.
+  const COVER_CELL = 8;
   const coverageGridCache = {};
   function getCoverageGrid(partId) {
     const lesson = getLesson();
@@ -191,8 +144,12 @@ export function initDrawingSchoolApp() {
     const cells = [];
     for (let cy = COVER_CELL / 2; cy < CANVAS_H; cy += COVER_CELL) {
       for (let cx = COVER_CELL / 2; cx < CANVAS_W; cx += COVER_CELL) {
-        if (g.isPointInPath(cx, cy)) cells.push([cx, cy]);
+        if (g.isPointInPath(cx, cy, 'evenodd')) cells.push([cx, cy]);
       }
+    }
+    if (cells.length === 0) {
+      const fallback = getPartTargetCenter(lesson, partId);
+      cells.push([fallback.x, fallback.y]);
     }
     coverageGridCache[key] = cells;
     return cells;
@@ -246,10 +203,13 @@ export function initDrawingSchoolApp() {
 
   function clearPartCanvases() {
     for (const pid of partOrder) {
-      const c = partCanvases[pid];
-      c.getContext('2d').clearRect(0, 0, CANVAS_W, CANVAS_H);
+      const nc = document.createElement('canvas');
+      nc.width = CANVAS_W;
+      nc.height = CANVAS_H;
+      partCanvases[pid] = nc;
     }
     state.stickers = [];
+    state.sparkles = [];
   }
 
   function spawnSparkles(x, y, color = '#FFD43B', count = 8) {
@@ -269,105 +229,9 @@ export function initDrawingSchoolApp() {
   }
 
   function syncUI() {
-    const lesson = getLesson();
-
-    // Update character buttons
-    document.querySelectorAll('.char-pill').forEach((btn) => {
-      const active = btn.dataset.charId === state.characterId;
-      btn.classList.toggle('active', active);
-      const done = state.completedCharacters.includes(btn.dataset.charId);
-      btn.classList.toggle('done', done);
-    });
-
-    // Update phase badge & step banner
-    const phaseBadge = document.getElementById('phase-badge');
-    const stepTitle = document.getElementById('step-title');
-    const stepHint = document.getElementById('step-hint');
-    const meterFill = document.getElementById('step-meter-fill');
-    const meterLabel = document.getElementById('step-meter-label');
-
-    if (state.phase === 'drawing') {
-      const ds = lesson.drawSteps[state.drawStepIndex] || lesson.drawSteps[0];
-      const totalSub = ds.strokes.length;
-      const pct = Math.min(
-        100,
-        Math.round(((state.strokeSubIndex + state.strokeProgress) / totalSub) * 100)
-      );
-      if (phaseBadge) phaseBadge.textContent = `✏️ DRAW STEP ${state.drawStepIndex + 1} OF 6`;
-      if (stepTitle) stepTitle.textContent = ds.title;
-      if (stepHint) stepHint.textContent = ds.hint;
-      if (meterFill) meterFill.style.width = `${pct}%`;
-      if (meterLabel) meterLabel.textContent = `${pct}% Traced`;
-    } else if (state.phase === 'coloring') {
-      const cs = lesson.colorSteps[state.colorStepIndex] || lesson.colorSteps[0];
-      const pct = Math.min(100, Math.round(state.colorCoverage));
-      if (phaseBadge) phaseBadge.textContent = `🎨 COLOR STEP ${state.colorStepIndex + 1} OF 7`;
-      if (stepTitle) stepTitle.textContent = cs.title;
-      if (stepHint) stepHint.textContent = cs.hint;
-      if (meterFill) meterFill.style.width = `${pct}%`;
-      if (meterLabel) meterLabel.textContent = `${pct}% Colored`;
-    } else {
-      if (phaseBadge) phaseBadge.textContent = `🎉 FINISHED MASTERPIECE!`;
-      if (stepTitle) stepTitle.textContent = `${lesson.name} is Alive & Dancing!`;
-      if (stepHint) stepHint.textContent = 'Tap Next Friend or Replay any step!';
-      if (meterFill) meterFill.style.width = '100%';
-      if (meterLabel) meterLabel.textContent = '100% Complete ⭐';
-    }
-
-    // Update 13-step ladder on the left
-    const ladderEl = document.getElementById('step-ladder');
-    if (ladderEl) {
-      const items = [];
-      lesson.drawSteps.forEach((ds, idx) => {
-        const isDone = state.phase !== 'drawing' || idx < state.drawStepIndex;
-        const isCurrent = state.phase === 'drawing' && idx === state.drawStepIndex;
-        items.push(`
-          <button class="ladder-step ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}"
-                  data-jump-phase="drawing" data-jump-idx="${idx}">
-            <span class="step-badge">${isDone ? '✓' : `D${idx + 1}`}</span>
-            <span class="step-text">${ds.title.replace(/^Step \d+:\s*/, '')}</span>
-          </button>
-        `);
-      });
-      lesson.colorSteps.forEach((cs, idx) => {
-        const isDone =
-          state.phase === 'celebrate' || (state.phase === 'coloring' && idx < state.colorStepIndex);
-        const isCurrent = state.phase === 'coloring' && idx === state.colorStepIndex;
-        items.push(`
-          <button class="ladder-step color-kind ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}"
-                  data-jump-phase="coloring" data-jump-idx="${idx}">
-            <span class="step-badge" style="background:${cs.recommendedColor}">${isDone ? '✓' : `C${idx + 1}`}</span>
-            <span class="step-text">${cs.title.replace(/^Color Step \d+\/7:\s*/, '')}</span>
-          </button>
-        `);
-      });
-      ladderEl.innerHTML = items.join('');
-      ladderEl.querySelectorAll('.ladder-step').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const jp = btn.dataset.jumpPhase;
-          const ji = Number(btn.dataset.jumpIdx) || 0;
-          jumpToPhase(jp, ji);
-        });
-      });
-    }
-
-    // Highlight recommended swatch & active tool
-    const recColor =
-      state.phase === 'coloring'
-        ? lesson.colorSteps[state.colorStepIndex]?.recommendedColor
-        : lesson.palette.base;
-    document.querySelectorAll('.swatch-btn').forEach((btn) => {
-      const hex = btn.dataset.color;
-      btn.classList.toggle('selected', hex.toUpperCase() === state.selectedColor.toUpperCase());
-      btn.classList.toggle(
-        'recommended',
-        Boolean(recColor && hex.toUpperCase() === recColor.toUpperCase())
-      );
-    });
-
-    document.querySelectorAll('.tool-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.tool === state.selectedTool);
-    });
+    // Everything on the page around the paper (step beads, crayons, friends, helper
+    // buttons, words for grown-ups) is painted by ./ui.js from this state.
+    ui.sync(state, getLesson());
   }
 
   function selectCharacter(charId, quiet = false) {
@@ -422,6 +286,7 @@ export function initDrawingSchoolApp() {
       syncUI();
     } else {
       // Transition to Phase 2: Step-by-Step Part-by-Part Coloring!
+      clearPartCanvases();
       state.phase = 'coloring';
       state.strokeSubIndex = 0;
       state.strokeProgress = 0;
@@ -447,10 +312,8 @@ export function initDrawingSchoolApp() {
     const pCtx = pCanvas.getContext('2d');
     pCtx.save();
     pCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    if (partId !== 'background_frame') {
-      buildPartClipPath(pCtx, lesson, partId);
-      pCtx.clip();
-    }
+    buildPartClipPath(pCtx, lesson, partId);
+    pCtx.clip('evenodd');
 
     if (partId === 'background_frame') {
       const grad = pCtx.createLinearGradient(0, 0, 0, CANVAS_H);
@@ -461,13 +324,12 @@ export function initDrawingSchoolApp() {
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       // Add cute floating stars/hearts on the background
       state.stickers = [
-        { x: 115, y: 120, emoji: '⭐' },
-        { x: 685, y: 125, emoji: '🌈' },
-        { x: 105, y: 470, emoji: '💖' },
-        { x: 695, y: 465, emoji: '✨' },
+        { x: 96, y: 112, emoji: '⭐' },
+        { x: 704, y: 116, emoji: '🌈' },
+        { x: 94, y: 508, emoji: '💖' },
+        { x: 706, y: 504, emoji: '✨' },
       ];
     } else if (partId === 'shading_sparkles') {
-      pCtx.globalAlpha = 0.36;
       pCtx.fillStyle = colorHex;
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     } else {
@@ -475,7 +337,7 @@ export function initDrawingSchoolApp() {
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       // Add subtle warm highlight sheen
       const sheen = pCtx.createRadialGradient(350, 170, 15, 400, 320, 260);
-      sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
+      sheen.addColorStop(0, 'rgba(255,255,255,0.18)');
       sheen.addColorStop(1, 'rgba(255,255,255,0)');
       pCtx.fillStyle = sheen;
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -490,7 +352,7 @@ export function initDrawingSchoolApp() {
 
     // Ensure the finished part is 100% cleanly filled inside its lines
     fillPartCanvasSolid(cs.partId, state.selectedColor || cs.recommendedColor);
-    const center = getPartTargetCenter(cs.partId);
+    const center = getPartTargetCenter(lesson, cs.partId);
     spawnSparkles(center.x, center.y, state.selectedColor || '#FFD43B', 18);
     audio.playStepComplete();
 
@@ -536,7 +398,7 @@ export function initDrawingSchoolApp() {
 
     pCtx.save();
     buildPartClipPath(pCtx, lesson, cs.partId);
-    pCtx.clip();
+    pCtx.clip('evenodd');
 
     const color = state.selectedColor || cs.recommendedColor;
     if (state.selectedTool === 'crayon') {
@@ -551,7 +413,7 @@ export function initDrawingSchoolApp() {
       }
     } else if (state.selectedTool === 'watercolor') {
       pCtx.fillStyle = color;
-      pCtx.globalAlpha = cs.partId === 'shading_sparkles' ? 0.25 : 0.45;
+      pCtx.globalAlpha = 0.52;
       pCtx.beginPath();
       pCtx.arc(x, y, 42, 0, Math.PI * 2);
       pCtx.fill();
@@ -618,6 +480,7 @@ export function initDrawingSchoolApp() {
       let bestD = -1;
       let bestGap = Infinity;
       for (let i = 0; i < pts.length - 1; i++) {
+        if (pts[i + 1][2]) continue;
         if (cum[i + 1] < lo || cum[i] > hi) continue;
         const ax = pts[i][0];
         const ay = pts[i][1];
@@ -718,7 +581,9 @@ export function initDrawingSchoolApp() {
     const cum = [0];
     let total = 0;
     for (let i = 1; i < pts.length; i++) {
-      total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (!pts[i][2]) {
+        total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      }
       cum.push(total);
     }
     return cum;
@@ -731,13 +596,14 @@ export function initDrawingSchoolApp() {
 
   function samplePointOnPolyline(pts, ratio = 0) {
     if (!pts || pts.length === 0) return [400, 320];
-    if (pts.length === 1) return pts[0];
+    if (pts.length === 1) return [pts[0][0], pts[0][1]];
     const clamped = Math.max(0, Math.min(1, ratio));
     const cum = getPolylineArcLengths(pts);
     const total = cum[cum.length - 1];
-    if (total <= 0) return pts[0];
+    if (total <= 0) return [pts[0][0], pts[0][1]];
     const targetDist = clamped * total;
     for (let i = 0; i < cum.length - 1; i++) {
+      if (pts[i + 1][2]) continue;
       if (targetDist <= cum[i + 1] || i === cum.length - 2) {
         const segLen = Math.max(1e-6, cum[i + 1] - cum[i]);
         const frac = Math.max(0, Math.min(1, (targetDist - cum[i]) / segLen));
@@ -746,7 +612,8 @@ export function initDrawingSchoolApp() {
         return [p0[0] + (p1[0] - p0[0]) * frac, p0[1] + (p1[1] - p0[1]) * frac];
       }
     }
-    return pts[pts.length - 1];
+    const last = pts[pts.length - 1];
+    return [last[0], last[1]];
   }
 
   function drawStrokePolyline(targetCtx, pts, ratio = 1.0, style = {}) {
@@ -761,21 +628,28 @@ export function initDrawingSchoolApp() {
     targetCtx.beginPath();
     targetCtx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 0; i < cum.length - 1; i++) {
+      const p1 = pts[i + 1];
+      if (p1[2]) {
+        if (targetDist > cum[i + 1]) {
+          targetCtx.moveTo(p1[0], p1[1]);
+          continue;
+        }
+        break;
+      }
       if (targetDist >= cum[i + 1]) {
-        targetCtx.lineTo(pts[i + 1][0], pts[i + 1][1]);
+        targetCtx.lineTo(p1[0], p1[1]);
       } else if (targetDist > cum[i]) {
         const segLen = Math.max(1e-6, cum[i + 1] - cum[i]);
         const frac = (targetDist - cum[i]) / segLen;
         const p0 = pts[i];
-        const p1 = pts[i + 1];
         targetCtx.lineTo(p0[0] + (p1[0] - p0[0]) * frac, p0[1] + (p1[1] - p0[1]) * frac);
         break;
       } else {
         break;
       }
     }
-    targetCtx.strokeStyle = style.color || '#3B2314';
-    targetCtx.lineWidth = style.width || 7;
+    targetCtx.strokeStyle = style.color || '#231B18';
+    targetCtx.lineWidth = style.width || 6.2;
     targetCtx.lineCap = 'round';
     targetCtx.lineJoin = 'round';
     if (style.dash) {
@@ -787,29 +661,11 @@ export function initDrawingSchoolApp() {
   }
 
   function renderTeacherPencil(targetCtx, x, y) {
-    targetCtx.save();
-    targetCtx.translate(x, y);
-    targetCtx.rotate(-0.55);
-    // Pencil tip cone
-    targetCtx.fillStyle = '#FFE066';
-    targetCtx.beginPath();
-    targetCtx.moveTo(0, 0);
-    targetCtx.lineTo(12, -26);
-    targetCtx.lineTo(-12, -26);
-    targetCtx.closePath();
-    targetCtx.fill();
-    // Pencil lead
-    targetCtx.fillStyle = '#FA5252';
-    targetCtx.beginPath();
-    targetCtx.arc(0, 0, 5, 0, Math.PI * 2);
-    targetCtx.fill();
-    // Pencil barrel
-    targetCtx.fillStyle = '#FF922B';
-    targetCtx.fillRect(-12, -74, 24, 48);
-    // Eraser cap
-    targetCtx.fillStyle = '#FF85C0';
-    targetCtx.fillRect(-12, -88, 24, 14);
-    targetCtx.restore();
+    // Sprite lives in ./ui.js: a pencil while drawing, a crayon in the suggested colour while colouring.
+    const cs = state.phase === 'coloring' ? getLesson().colorSteps[state.colorStepIndex] : null;
+    paintTeacherPencil(targetCtx, x, y, {
+      crayonColor: cs ? cs.recommendedColor || state.selectedColor : null,
+    });
   }
 
   function renderEasel(nowMs) {
@@ -880,23 +736,8 @@ export function initDrawingSchoolApp() {
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Cream sketchbook paper background with subtle notebook grid
-    ctx.fillStyle = '#FFFDF7';
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.strokeStyle = 'rgba(220, 205, 185, 0.28)';
-    ctx.lineWidth = 1;
-    for (let gx = 40; gx < CANVAS_W; gx += 40) {
-      ctx.beginPath();
-      ctx.moveTo(gx, 0);
-      ctx.lineTo(gx, CANVAS_H);
-      ctx.stroke();
-    }
-    for (let gy = 40; gy < CANVAS_H; gy += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, gy);
-      ctx.lineTo(CANVAS_W, gy);
-      ctx.stroke();
-    }
+    // Cream sketchbook paper with a quiet dot grid (cached texture from ./ui.js)
+    paintPaper(ctx, CANVAS_W, CANVAS_H);
 
     ctx.save();
     if (state.phase === 'celebrate') {
@@ -911,6 +752,17 @@ export function initDrawingSchoolApp() {
     if (state.phase === 'coloring' || state.phase === 'celebrate') {
       for (const pid of partOrder) {
         ctx.drawImage(partCanvases[pid], 0, 0);
+      }
+      // Keep eye sclera crisp paper white above background/fur fills
+      if (lesson.eyeWhites && lesson.eyeWhites.length > 0) {
+        ctx.save();
+        ctx.beginPath();
+        for (const ring of lesson.eyeWhites) {
+          tracePointsToPath(ctx, ring, true);
+        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill('evenodd');
+        ctx.restore();
       }
       // Draw background stickers if any
       ctx.font = '44px sans-serif';
@@ -930,13 +782,13 @@ export function initDrawingSchoolApp() {
         ctx.save();
         buildPartClipPath(ctx, lesson, cs.partId);
         ctx.strokeStyle = cs.recommendedColor || '#FFD43B';
-        ctx.lineWidth = 14;
+        ctx.lineWidth = 12;
         ctx.globalAlpha = 0.28 + Math.sin(state.danceTime * 2.2) * 0.08;
         ctx.stroke();
         ctx.setLineDash([14, 10]);
         ctx.lineDashOffset = 0;
         ctx.strokeStyle = '#FFD43B';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 4.5;
         ctx.globalAlpha = 0.92;
         ctx.stroke();
         ctx.restore();
@@ -944,33 +796,23 @@ export function initDrawingSchoolApp() {
     }
 
     // 3. Draw completed ink steps
+    const inkWidth = lesson.strokeWidth || 6.2;
     const completedDrawStepCount =
       state.phase === 'drawing' ? state.drawStepIndex : lesson.drawSteps.length;
     for (let sIdx = 0; sIdx < completedDrawStepCount; sIdx++) {
       const ds = lesson.drawSteps[sIdx];
       for (const strokePts of ds.strokes) {
-        drawStrokePolyline(ctx, strokePts, 1.0, { color: '#3B2314', width: 7 });
+        drawStrokePolyline(ctx, strokePts, 1.0, { color: '#231B18', width: inkWidth });
       }
     }
 
-    // Fill eye pupils & eye sparkle catchlights once Step 3 (eyes & nose) is drawn
-    if (completedDrawStepCount >= 3) {
-      ctx.fillStyle = '#21183C';
-      ctx.beginPath();
-      addEllipseSubpath(ctx, 344, 178, 16, 21, 0);
-      addEllipseSubpath(ctx, 456, 178, 16, 21, 0);
-      addEllipseSubpath(ctx, 400, 220, 11, 8, 0);
-      ctx.fill();
-
-      // White eye catchlights (separate subpaths so no line connects them!)
-      const bigCatch = state.phase === 'celebrate' || state.colorStepIndex >= 5 ? 8 : 6;
+    // Add gleaming white eye sparkle catchlights once Step 6 (Velvet Smile & Eye Sparkles) is filled
+    if (
+      (state.phase === 'celebrate' || (state.phase === 'coloring' && state.colorStepIndex > 5)) &&
+      lesson.catchlights
+    ) {
       ctx.fillStyle = '#FFFFFF';
-      for (const [cx, cy, r] of [
-        [338, 170, bigCatch],
-        [450, 170, bigCatch],
-        [351, 186, 3.8],
-        [463, 186, 3.8],
-      ]) {
+      for (const [cx, cy, r] of lesson.catchlights) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
@@ -983,13 +825,13 @@ export function initDrawingSchoolApp() {
       if (ds) {
         // Already finished sub-strokes of current step
         for (let sub = 0; sub < state.strokeSubIndex; sub++) {
-          drawStrokePolyline(ctx, ds.strokes[sub], 1.0, { color: '#3B2314', width: 7 });
+          drawStrokePolyline(ctx, ds.strokes[sub], 1.0, { color: '#231B18', width: inkWidth });
         }
         // Remaining preview sub-strokes in faint lavender
         for (let sub = state.strokeSubIndex + 1; sub < ds.strokes.length; sub++) {
           drawStrokePolyline(ctx, ds.strokes[sub], 1.0, {
-            color: 'rgba(155, 93, 229, 0.25)',
-            width: 5,
+            color: 'rgba(155, 93, 229, 0.22)',
+            width: 4.5,
             dash: [10, 10],
           });
         }
@@ -998,7 +840,7 @@ export function initDrawingSchoolApp() {
         if (activePts && activePts.length >= 2) {
           drawStrokePolyline(ctx, activePts, 1.0, {
             color: 'rgba(112, 72, 232, 0.50)',
-            width: 11,
+            width: inkWidth + 3.5,
             dash: [16, 12],
             dashOffset: 0,
           });
@@ -1008,39 +850,31 @@ export function initDrawingSchoolApp() {
           if (!state.teacherDemoDone && state.strokeProgress === 0) {
             drawStrokePolyline(ctx, activePts, linearDemoT, {
               color: 'rgba(255, 146, 43, 0.45)',
-              width: 9,
+              width: inkWidth + 2,
             });
           }
 
           drawStrokePolyline(ctx, activePts, state.strokeProgress, {
-            color: '#3B2314',
-            width: 8,
+            color: '#231B18',
+            width: inkWidth + 0.6,
           });
 
-          const startPt = activePts[0];
+          let startPt = activePts[0];
+          if (state.strokeProgress > 0) {
+            const cumA = getPolylineArcLengths(activePts);
+            const tipDist = state.strokeProgress * (cumA[cumA.length - 1] || 0);
+            for (let k = 1; k < activePts.length; k++) {
+              if (activePts[k][2] && Math.abs(tipDist - cumA[k]) <= 2.5) {
+                startPt = activePts[k];
+                break;
+              }
+            }
+          }
           const endPt = activePts[activePts.length - 1];
 
-          // Gold FINISH dot drawn first so Green START dot always sits on top on closed loops
-          ctx.fillStyle = '#F59F00';
-          ctx.beginPath();
-          ctx.arc(endPt[0], endPt[1], 13, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 13px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('★', endPt[0], endPt[1]);
-
-          // Green START dot (drawn on top of FINISH dot when startPt == endPt)
-          ctx.fillStyle = '#2B8A3E';
-          ctx.beginPath();
-          ctx.arc(startPt[0], startPt[1], 14, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 13px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('START', startPt[0], startPt[1]);
+          // Gold FINISH star drawn first so Green START dot always sits on top on closed loops
+          paintFinishStar(ctx, endPt[0], endPt[1]);
+          paintStartDot(ctx, startPt[0], startPt[1]);
 
           // Teacher pencil: glides at constant 5-year-old speed (28 px/sec) ONCE during !teacherDemoDone, then parks calmly at child's stroke tip (or START)
           const pencilRatio = !state.teacherDemoDone ? linearDemoT : state.strokeProgress;
@@ -1054,22 +888,11 @@ export function initDrawingSchoolApp() {
     if (state.phase === 'coloring') {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
-        const target = getPartTargetCenter(cs.partId);
+        const target = getPartTargetCenter(lesson, cs.partId);
+        const pillX = Math.max(135, Math.min(CANVAS_W - 135, target.x));
+        const pillY = Math.max(66, Math.min(CANVAS_H - 20, target.y));
         const bobY = Math.sin(state.danceTime * 1.4) * 2.0;
-        ctx.save();
-        ctx.fillStyle = 'rgba(33, 24, 60, 0.86)';
-        ctx.beginPath();
-        ctx.roundRect(target.x - 115, target.y - 54 + bobY, 230, 34, 17);
-        ctx.fill();
-        ctx.strokeStyle = '#FFD43B';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-        ctx.fillStyle = '#FFF9DB';
-        ctx.font = 'bold 14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`🖌️ ${target.label}`, target.x, target.y - 37 + bobY);
-        ctx.restore();
+        paintLabelPill(ctx, pillX, pillY - 37 + bobY, target.label);
 
         if (!state.teacherDemoDone && state.colorCoverage === 0) {
           const demoT = Math.max(0, Math.min(1, state.teacherPhase));
@@ -1086,15 +909,15 @@ export function initDrawingSchoolApp() {
             }
           } else {
             demoWaypoints = [
-              [target.x - 36, target.y - 16],
-              [target.x + 36, target.y],
-              [target.x - 24, target.y + 18],
-              [target.x + 28, target.y + 16],
+              [target.x - 24, target.y - 12],
+              [target.x + 24, target.y],
+              [target.x - 16, target.y + 12],
+              [target.x + 20, target.y + 10],
             ];
           }
           ctx.save();
           buildPartClipPath(ctx, lesson, cs.partId);
-          ctx.clip();
+          ctx.clip('evenodd');
           drawStrokePolyline(ctx, demoWaypoints, demoT, {
             color: cs.recommendedColor || state.selectedColor || '#FFD43B',
             width: 24,
@@ -1130,86 +953,50 @@ export function initDrawingSchoolApp() {
     requestAnimationFrame(renderEasel);
   }
 
-  // Wire DOM controls
-  const charStrip = document.getElementById('character-strip');
-  if (charStrip) {
-    charStrip.innerHTML = CHARACTER_LESSONS.map(
-      (c) => `
-      <button class="char-pill" data-char-id="${c.id}" id="btn-char-${c.id}">
-        <span class="char-emoji">${c.emoji}</span>
-        <span class="char-name">${c.name}</span>
-      </button>
-    `
-    ).join('');
-    charStrip.querySelectorAll('.char-pill').forEach((btn) => {
-      btn.addEventListener('click', () => selectCharacter(btn.dataset.charId));
-    });
-  }
-
-  const swatchGrid = document.getElementById('swatch-grid');
-  if (swatchGrid) {
-    swatchGrid.innerHTML = SWATCH_PALETTE.map(
-      (sw, idx) => `
-      <button class="swatch-btn" data-color="${sw.hex}" id="btn-swatch-${idx}"
-              style="background:${sw.hex}" title="${sw.name}" aria-label="${sw.name}">
-      </button>
-    `
-    ).join('');
-    swatchGrid.querySelectorAll('.swatch-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        state.selectedColor = btn.dataset.color;
+  // Wire DOM controls: the markup and listeners live in ./ui.js, the game supplies the actions.
+  const replayTeacherVoice = () => {
+    if (
+      (state.phase === 'drawing' && state.strokeProgress === 0) ||
+      (state.phase === 'coloring' && state.colorCoverage === 0)
+    ) {
+      resetTeacherDemo();
+    }
+    audio.replayLast(setSubtitle);
+  };
+  const goToNextFriend = () => {
+    const idx = CHARACTER_LESSONS.findIndex((c) => c.id === state.characterId);
+    const next = CHARACTER_LESSONS[(idx + 1) % CHARACTER_LESSONS.length];
+    selectCharacter(next.id);
+  };
+  const ui = createSketchbookUI({
+    lessons: CHARACTER_LESSONS,
+    swatches: SWATCH_PALETTE,
+    handlers: {
+      onPickFriend: (id) => selectCharacter(id),
+      onJump: (phase, idx) => jumpToPhase(phase, idx),
+      onColor: (hex) => {
+        state.selectedColor = hex;
         audio.playTraceTick();
         syncUI();
-      });
-    });
-  }
-
-  document.querySelectorAll('.tool-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.selectedTool = btn.dataset.tool;
-      audio.playTraceTick();
-      syncUI();
-    });
+      },
+      onTool: (tool) => {
+        state.selectedTool = tool;
+        audio.playTraceTick();
+        syncUI();
+      },
+      onAutoStep: () => autoCompleteCurrentStep(),
+      onFillPart: () => {
+        if (state.phase === 'coloring') {
+          state.colorCoverage = 100;
+          advanceColoringStep();
+        } else {
+          autoCompleteCurrentStep();
+        }
+      },
+      onVoice: replayTeacherVoice,
+      onNextFriend: goToNextFriend,
+    },
   });
-
-  const btnAutoStep = document.getElementById('btn-auto-step');
-  if (btnAutoStep) {
-    btnAutoStep.addEventListener('click', () => autoCompleteCurrentStep());
-  }
-
-  const btnFillPart = document.getElementById('btn-fill-part');
-  if (btnFillPart) {
-    btnFillPart.addEventListener('click', () => {
-      if (state.phase === 'coloring') {
-        state.colorCoverage = 100;
-        advanceColoringStep();
-      } else {
-        autoCompleteCurrentStep();
-      }
-    });
-  }
-
-  const btnVoiceReplay = document.getElementById('btn-voice-replay');
-  if (btnVoiceReplay) {
-    btnVoiceReplay.addEventListener('click', () => {
-      if (
-        (state.phase === 'drawing' && state.strokeProgress === 0) ||
-        (state.phase === 'coloring' && state.colorCoverage === 0)
-      ) {
-        resetTeacherDemo();
-      }
-      audio.replayLast(setSubtitle);
-    });
-  }
-
-  const btnNextChar = document.getElementById('btn-next-char');
-  if (btnNextChar) {
-    btnNextChar.addEventListener('click', () => {
-      const idx = CHARACTER_LESSONS.findIndex((c) => c.id === state.characterId);
-      const next = CHARACTER_LESSONS[(idx + 1) % CHARACTER_LESSONS.length];
-      selectCharacter(next.id);
-    });
-  }
 
   function toCanvasCoords(evt) {
     const rect = canvas.getBoundingClientRect();
@@ -1266,33 +1053,47 @@ export function initDrawingSchoolApp() {
         subtitleText: state.subtitleText,
         audio: audio.getState(),
         totalCharacters: CHARACTER_LESSONS.length,
+        pickerOpen: ui.isPickerOpen(),
       };
     },
     selectCharacter(id) {
+      ui.closePicker();
       selectCharacter(id, false);
       return this.getState();
     },
     autoCompleteCurrentStep() {
+      ui.closePicker();
       autoCompleteCurrentStep();
       return this.getState();
     },
     jumpToPhase(phase, idx = 0) {
+      ui.closePicker();
       jumpToPhase(phase, idx);
       return this.getState();
     },
     replayVoice() {
-      if (
-        (state.phase === 'drawing' && state.strokeProgress === 0) ||
-        (state.phase === 'coloring' && state.colorCoverage === 0)
-      ) {
-        resetTeacherDemo();
-      }
-      audio.replayLast(setSubtitle);
+      replayTeacherVoice();
+      return this.getState();
+    },
+    openPicker() {
+      ui.openPicker({ closable: true });
+      return this.getState();
+    },
+    closePicker() {
+      ui.closePicker();
       return this.getState();
     },
   };
 
   selectCharacter('catnap', true);
   setSubtitle('welcome');
+  // First screen is the friend picker cover; ?play=<friend id> opens straight on the paper.
+  const playParam = new URLSearchParams(window.location.search).get('play');
+  if (playParam === null) {
+    ui.openPicker({ closable: false });
+  } else {
+    ui.closePicker();
+    if (CHARACTER_LESSONS.some((c) => c.id === playParam)) selectCharacter(playParam, true);
+  }
   requestAnimationFrame(renderEasel);
 }

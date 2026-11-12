@@ -1,0 +1,1165 @@
+/* Smiling Critters Drawing School — sketchbook page UI.
+   One visual language: warm desk, cream paper, brown ink outlines (3px),
+   a chunky ink "press" edge under everything that can be tapped, rounded type.
+   No web fonts, no external requests. */
+
+:root {
+  --ink: #4A3426;
+  --ink-soft: #8B6F5C;
+  --paper: #FFFCF4;
+  --cream: #FFF6E3;
+  --desk-a: #F8ECD2;
+  --desk-b: #EFDAB6;
+  --kraft: #E4C89A;
+  --kraft-in: #CBA670;
+  --sun: #FFCB45;
+  --sun-deep: #F2A52B;
+  --leaf: #5EC27F;
+  --berry: #FF7F7F;
+
+  /* live colours, written by src/ui.js */
+  --cur: #9B5DE5; /* colour in the child's hand */
+  --rec: #9B5DE5; /* colour the teacher suggests */
+  --fc: #9B5DE5;  /* colour of the friend on the page */
+
+  --font: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Nunito", "Varela Round",
+    "Comic Sans MS", "Chalkboard SE", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  color-scheme: light;
+
+  --vh: 100vh;
+  --vw: 100vw;
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  --pad: 12px;    /* space around the desk */
+  --gap: 12px;    /* space between things on the desk */
+  --edge: 6px;    /* sketchbook cover showing around the paper */
+  --strip: 64px;  /* sketchbook binding (holds the step beads) */
+  --bar: 76px;    /* row with friend, teacher bubble and helper */
+  --rail: 158px;  /* crayon box column in the wide layout */
+  --line: 3px;    /* ink outline */
+  --press: 5px;   /* ink edge under tappable things */
+  --r-lg: 26px;
+  --r-md: 20px;
+  --r-sm: 12px;
+}
+
+@supports (height: 100dvh) {
+  :root { --vh: 100dvh; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--desk-b);
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  appearance: none;
+}
+button:focus-visible { outline: 4px solid #3D8BFF; outline-offset: 3px; }
+
+svg { display: block; }
+img { display: block; -webkit-user-drag: none; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------------ desk */
+
+.app,
+.picker {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  padding:
+    calc(var(--pad) + var(--sat)) calc(var(--pad) + var(--sar))
+    calc(var(--pad) + var(--sab)) calc(var(--pad) + var(--sal));
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 62%),
+    radial-gradient(rgba(190, 150, 96, 0.2) 1.6px, transparent 2.2px) 0 0 / 28px 28px,
+    linear-gradient(180deg, var(--desk-a), var(--desk-b));
+}
+.app {
+  position: fixed;
+  overflow: hidden;
+}
+
+/* Wide layout (tablet landscape, desktop):
+     [ binding | paper .................. ] [ friend  ]
+     [ binding | paper .................. ] [ crayons ]
+     [ teacher ........ | brushes | helper ] [ crayons ]
+   The bar takes whatever height the paper cannot use (86-100px). */
+.desk {
+  --aw: calc(var(--vw) - 2 * var(--pad) - var(--sal) - var(--sar));
+  --ah: calc(var(--vh) - 2 * var(--pad) - var(--sat) - var(--sab));
+  --bar-free: calc(
+    var(--ah) - 2 * var(--edge) - var(--gap) - (var(--aw) - var(--strip) - var(--edge) - var(--gap) - var(--rail)) * 0.8
+  );
+  --bar: clamp(86px, var(--bar-free), 100px);
+  --fr: 87px; /* friend button row: 82px button + press edge */
+  --cw: min(
+    calc(var(--aw) - var(--strip) - var(--edge) - var(--gap) - var(--rail)),
+    calc((var(--ah) - 2 * var(--edge) - var(--gap) - var(--bar)) * 1.25)
+  );
+  --ch: calc(var(--cw) * 0.8);
+  --book-w: calc(var(--cw) + var(--strip) + var(--edge));
+  --book-h: calc(var(--ch) + 2 * var(--edge));
+  --tap: calc(var(--bar) - var(--press)); /* height of the things in the bar */
+
+  position: relative;
+  width: calc(var(--book-w) + var(--gap) + var(--rail));
+  height: calc(var(--book-h) + var(--gap) + var(--bar));
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr) auto auto var(--rail);
+  grid-template-rows: var(--fr) calc(var(--book-h) - var(--gap) - var(--fr)) var(--bar);
+  grid-template-areas:
+    "book   book    book   friend"
+    "book   book    book   crayons"
+    "bubble brushes helper crayons";
+}
+
+/* ------------------------------------------------------------ sketchbook */
+
+.book {
+  grid-area: book;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--strip) minmax(0, 1fr);
+  padding: var(--edge) var(--edge) var(--edge) 0;
+  min-width: 0;
+  min-height: 0;
+  background: var(--kraft);
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 var(--line) var(--ink), 0 14px 22px -10px rgba(92, 60, 24, 0.5);
+}
+
+.binding {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.binding::before { /* stitching on the cover */
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 6px;
+  border-left: 2px dashed rgba(74, 52, 38, 0.28);
+  pointer-events: none;
+}
+
+.paper {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--paper);
+  border-radius: 10px 20px 20px 10px;
+  box-shadow: 0 0 0 2.5px var(--ink);
+}
+.paper::before { /* spiral wire */
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 20px;
+  bottom: 20px;
+  left: -12px;
+  width: 22px;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='26'%3E%3Ccircle cx='17' cy='13' r='3.4' fill='%234A3426'/%3E%3Crect x='1.5' y='10' width='16.500' height='6' rx='3' fill='%23FFF6E3' stroke='%234A3426' stroke-width='2'/%3E%3C/svg%3E")
+    center top / 22px 26px repeat-y;
+}
+
+#easel-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--paper);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.page-star { /* gold sticker when the picture is finished */
+  position: absolute;
+  z-index: 3;
+  top: -16px;
+  right: -8px;
+  width: clamp(56px, 11vmin, 96px);
+  pointer-events: none;
+  transform: rotate(14deg) scale(0);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s;
+  filter: drop-shadow(0 4px 0 rgba(74, 52, 38, 0.25));
+}
+.page-star svg { width: 100%; height: auto; }
+html[data-phase="celebrate"] .page-star { transform: rotate(14deg) scale(1); }
+
+/* ---- step beads on the binding ---- */
+
+.step-trail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 0;
+}
+.step-trail > * {
+  flex: 0 1 64px;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.bead-dot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: var(--line) solid var(--ink);
+  border-radius: 50%;
+  background: var(--cream);
+  overflow: hidden;
+}
+.bead.kind-color .bead-dot { /* pale drop of the colour still to come */
+  background: linear-gradient(rgba(255, 252, 244, 0.6), rgba(255, 252, 244, 0.6)), var(--bc, var(--sun));
+}
+.bead.is-done .bead-dot { background: var(--leaf); }
+.bead.kind-color.is-done .bead-dot { background: var(--bc, var(--leaf)); }
+.bead.is-done svg { width: 84%; height: 84%; }
+
+.bead.is-current .bead-dot {
+  width: 46px;
+  height: 46px;
+  background: #fff;
+  box-shadow: 0 0 0 4px var(--sun);
+  transform: rotate(-90deg); /* so the meter rises from the bottom */
+  animation: bead-pulse 1.7s ease-in-out infinite;
+}
+.bead.kind-color.is-current .bead-dot {
+  background: linear-gradient(rgba(255, 252, 244, 0.78), rgba(255, 252, 244, 0.78)), var(--bc, var(--sun));
+}
+.bead-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: var(--sun-deep);
+  transition: width 0.18s linear;
+}
+.bead.kind-color .bead-fill { background: var(--bc, var(--sun-deep)); }
+
+.trail-chip svg { width: 40px; height: 40px; padding: 5px; border-radius: 50%; }
+.trail-chip.is-active svg { background: var(--sun); box-shadow: 0 0 0 2.5px var(--ink); }
+.trail-chip.is-done svg { background: var(--leaf); box-shadow: 0 0 0 2.5px var(--ink); }
+.trail-chip.is-button svg {
+  width: 46px;
+  height: 46px;
+  padding: 4px;
+  background: #fff;
+  border: var(--line) solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 3px 0 var(--ink);
+}
+.trail-chip.is-button:active svg { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+
+@keyframes bead-pulse {
+  0%, 100% { transform: rotate(-90deg) scale(1); }
+  50% { transform: rotate(-90deg) scale(1.09); }
+}
+
+/* --------------------------------------------- friend, teacher and helper */
+
+.friend-btn {
+  --size: calc(var(--fr) - var(--press));
+  grid-area: friend;
+  position: relative;
+  align-self: start;
+  justify-self: center;
+  width: var(--size);
+  height: var(--size);
+  border: var(--line) solid var(--ink);
+  border-radius: 50%;
+  background: linear-gradient(rgba(255, 252, 244, 0.55), rgba(255, 252, 244, 0.55)), var(--fc);
+  box-shadow: 0 var(--press) 0 var(--ink);
+}
+.friend-face {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  display: grid;
+  place-items: center;
+}
+.friend-face .friend-img { width: 100%; height: 100%; object-fit: contain; }
+.friend-face .friend-tint { display: none; }
+.friend-face .friend-emoji { font-size: 30px; line-height: 1; }
+.friend-swap {
+  position: absolute;
+  right: -7px;
+  bottom: -5px;
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  background: #fff;
+  border: 2.5px solid var(--ink);
+  border-radius: 11px;
+}
+.friend-swap svg { width: 100%; height: 100%; }
+
+.bubble {
+  grid-area: bubble;
+  align-self: start;
+  height: var(--tap);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 8px;
+  background: var(--paper);
+  border: var(--line) solid var(--ink);
+  border-radius: 30px;
+  cursor: pointer;
+}
+.voice-btn {
+  --size: min(calc(var(--tap) - 14px), 68px);
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+  margin-top: -3px;
+  display: grid;
+  place-items: center;
+  background: var(--sun);
+  border: var(--line) solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 3px 0 var(--ink);
+}
+.voice-btn svg { width: 70%; height: 70%; }
+.bubble-text {
+  margin: 0;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1px;
+  padding: 1px 0 3px; /* room for descenders inside the clamp box */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.helper {
+  grid-area: helper;
+  align-self: start;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  width: 112px;
+  height: var(--tap);
+}
+.helper-btn {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 8px;
+  background: var(--sun);
+  border: var(--line) solid var(--ink);
+  border-radius: 26px;
+  box-shadow: 0 var(--press) 0 var(--ink);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.helper-btn svg { flex: none; width: min(calc(var(--tap) - 18px), 62px); height: min(calc(var(--tap) - 18px), 62px); }
+.helper-bucket { background: #fff; }
+.helper-next { background: var(--leaf); gap: 0; padding: 0 5px; }
+.helper-next svg { width: 34px; height: 34px; }
+.next-face {
+  position: relative;
+  flex: none;
+  width: min(calc(var(--tap) - 18px), 62px);
+  height: min(calc(var(--tap) - 18px), 62px);
+  border-radius: 50%;
+  border: 2.5px solid var(--ink);
+  background: linear-gradient(rgba(255, 252, 244, 0.6), rgba(255, 252, 244, 0.6)), var(--fc);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.next-face .friend-img { width: 88%; height: 88%; object-fit: contain; }
+.next-face .friend-tint { display: none; }
+.next-face .friend-emoji { font-size: 26px; line-height: 1; }
+
+html[data-phase="drawing"] .helper-wand,
+html[data-phase="coloring"] .helper-bucket,
+html[data-phase="celebrate"] .helper-next {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+html[data-phase="celebrate"] .helper-next { animation: nudge 1.4s ease-in-out infinite; }
+
+.friend-btn:active,
+.helper-btn:active,
+.friend-card:active,
+.round-btn:active {
+  transform: translateY(calc(var(--press) - 1px));
+  box-shadow: 0 1px 0 var(--ink);
+}
+.voice-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+
+@keyframes nudge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* The teacher is speaking: bubble pops once, the sound waves ripple. */
+html.is-talking .bubble { animation: bubble-pop 0.4s ease-out 1; }
+html.is-talking .wave-1 { animation: wave 0.7s ease-in-out infinite; }
+html.is-talking .wave-2 { animation: wave 0.7s ease-in-out 0.18s infinite; }
+@keyframes bubble-pop {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.025); }
+}
+@keyframes wave {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+/* Things in the boxes give a little under the finger. */
+.crayon:active .cr { transition-duration: 0.08s; transform: translate(-50%, calc(var(--sink) + 5%)); }
+.tool-btn:active svg { transform: scale(0.92); }
+
+/* -------------------------------------------------------------- crayons */
+
+.crayons,
+.brushes {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  padding: 5px;
+  background: var(--kraft);
+  border: var(--line) solid var(--ink);
+  border-radius: var(--r-md);
+}
+.crayons {
+  --star-cs: var(--wide-cs, 2);
+  --star-rs: var(--wide-rs, 1);
+  grid-area: crayons;
+  gap: 4px 6px;
+  padding: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.crayon {
+  --sink: 0%;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--kraft-in);
+  box-shadow: inset 0 3px 0 rgba(74, 52, 38, 0.22);
+}
+.cr {
+  position: absolute;
+  top: 15%;
+  bottom: -12%;
+  left: 50%;
+  width: clamp(30px, 56%, 46px);
+  display: flex;
+  flex-direction: column;
+  transform: translate(-50%, var(--sink));
+  transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-delay: calc(var(--i, 0) * 16ms);
+}
+.cr-tip {
+  flex: none;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 40 / 27;
+  overflow: visible;
+}
+.cr-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: -1px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.36) 0 24%, rgba(255, 255, 255, 0) 24% 76%, rgba(74, 52, 38, 0.16) 76%),
+    var(--c);
+  border: 2.5px solid var(--ink);
+  border-top: 0;
+}
+.cr-wrap { /* paper label */
+  position: absolute;
+  top: 9px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(255, 255, 255, 0.5);
+  border-top: 2px solid rgba(74, 52, 38, 0.55);
+}
+
+.crayon.selected {
+  --sink: -9%;
+  background: #fff;
+  box-shadow: inset 0 0 0 var(--line) var(--ink);
+}
+
+/* The starred crayon: the colour the teacher suggests for this step. */
+.crayon-star {
+  grid-column: span var(--star-cs);
+  grid-row: span var(--star-rs);
+  background:
+    repeating-conic-gradient(from -7.500deg at 50% 112%, rgba(255, 255, 255, 0.45) 0 15deg, rgba(255, 255, 255, 0) 15deg 30deg),
+    var(--sun);
+}
+.crayon-star.selected {
+  background:
+    repeating-conic-gradient(from -7.500deg at 50% 112%, rgba(255, 255, 255, 0.55) 0 15deg, rgba(255, 255, 255, 0) 15deg 30deg),
+    var(--sun);
+}
+.crayon-star .cr { width: clamp(34px, 42%, 62px); }
+.crayon-badge {
+  position: absolute;
+  z-index: 2;
+  top: 4px;
+  right: 5px;
+  width: clamp(24px, 36%, 44px);
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+.crayon-badge svg { width: 100%; height: 100%; }
+/* A slow twinkle keeps the suggested crayon easy to find; it hops three times when the suggestion changes. */
+html[data-phase="coloring"] .crayon-badge { animation: twinkle 2.6s ease-in-out infinite; }
+html[data-phase="coloring"] .crayon-star.nudge .cr { animation: hop 0.5s ease-in-out 3; }
+
+@keyframes hop {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -7%; }
+}
+@keyframes twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.14) rotate(12deg); }
+}
+
+/* Crayons nap in the box while drawing and on the party screen: only the tips peek out. */
+html:not([data-phase="coloring"]) .crayon { --sink: calc(87% - 38px); }
+html:not([data-phase="coloring"]) .crayon.selected {
+  background: var(--kraft-in);
+  box-shadow: inset 0 3px 0 rgba(74, 52, 38, 0.22);
+}
+html:not([data-phase="coloring"]) .crayon-star,
+html:not([data-phase="coloring"]) .crayon-star.selected {
+  background: var(--kraft-in);
+}
+html:not([data-phase="coloring"]) .crayon-badge { opacity: 0.45; }
+html:not([data-phase="coloring"]) .brushes .tool-btn { opacity: 0.5; }
+
+/* -------------------------------------------------------------- brushes */
+
+.brushes {
+  grid-area: brushes;
+  align-self: start;
+  height: var(--tap);
+  gap: 5px;
+  grid-template-columns: repeat(4, 64px);
+  grid-template-rows: minmax(0, 1fr);
+}
+.tool-btn {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--kraft-in);
+  box-shadow: inset 0 3px 0 rgba(74, 52, 38, 0.22);
+  transition: opacity 0.3s ease;
+}
+.tool-btn svg {
+  width: min(86%, 54px);
+  height: min(86%, 54px);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tool-btn.active {
+  background: #fff;
+  box-shadow: inset 0 0 0 var(--line) var(--ink);
+}
+.tool-btn.active svg { transform: scale(1.1) rotate(-8deg); }
+
+/* --------------------------------------------------------- friend picker */
+
+.picker {
+  position: absolute;
+  z-index: 30;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.22s ease, visibility 0s linear 0.22s;
+}
+html[data-picker="open"] .picker {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.picker-card {
+  position: relative;
+  width: min(100%, 1320px);
+  height: min(100%, 940px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.8vmin, 16px);
+  padding: clamp(12px, 2.4vmin, 24px) clamp(12px, 2.6vmin, 28px) clamp(16px, 2.8vmin, 28px);
+  background: var(--paper);
+  border: var(--line) solid var(--ink);
+  border-radius: 34px;
+  box-shadow: 0 14px 22px -10px rgba(92, 60, 24, 0.5);
+}
+
+.picker-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.logo {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1;
+}
+.logo-top {
+  padding: 5px 12px 6px;
+  font-size: clamp(12px, 2.1vmin, 17px);
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: var(--ink);
+  background: var(--sun);
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  transform: rotate(-2deg);
+}
+.logo-main {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: clamp(30px, 6.6vmin, 60px);
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+.logo-main i {
+  display: inline-block;
+  font-style: normal;
+  color: var(--lc, var(--berry));
+  -webkit-text-stroke: 2.5px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 var(--ink);
+  transform: rotate(var(--lr, 0deg)) translateY(var(--ly, 0px));
+}
+.logo-main i.sp { width: 0.32em; }
+
+.round-btn {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  background: var(--sun);
+  border: var(--line) solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 var(--press) 0 var(--ink);
+}
+.round-btn svg { width: 62%; height: 62%; }
+#btn-close-picker { background: #fff; }
+html[data-picker-closable="0"] #btn-close-picker { display: none; }
+html[data-picker-closable="1"] #btn-cover-voice { display: none; }
+
+.friend-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1.8vmin, 16px);
+  padding-bottom: var(--press);
+}
+.friend-grid[data-many] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.friend-grid:empty { display: grid; grid-template-columns: none; place-items: center; }
+.friend-grid:empty::before { /* friends are on their way (scripts still loading) */
+  content: "";
+  width: 64px;
+  height: 64px;
+  border: 7px solid var(--kraft);
+  border-top-color: var(--sun-deep);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.friend-card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: clamp(6px, 1.4vmin, 12px) clamp(6px, 1.4vmin, 12px) clamp(6px, 1.2vmin, 10px);
+  background: linear-gradient(rgba(255, 252, 244, 0.78), rgba(255, 252, 244, 0.78)), var(--fc);
+  border: var(--line) solid var(--ink);
+  border-radius: 24px;
+  box-shadow: 0 var(--press) 0 var(--ink);
+}
+.friend-art {
+  position: relative;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.friend-art::before { /* colour disc behind the friend: always a circle, whatever the card shape */
+  content: "";
+  position: absolute;
+  top: 1%;
+  right: 1%;
+  bottom: 1%;
+  left: 1%;
+  background:
+    radial-gradient(circle closest-side, rgba(255, 252, 244, 0.42) calc(100% - 1px), rgba(255, 252, 244, 0) 100%),
+    radial-gradient(circle closest-side, var(--fc) calc(100% - 1px), rgba(255, 252, 244, 0) 100%);
+}
+.friend-art .friend-img,
+.friend-art .friend-tint {
+  position: absolute;
+  top: 4%;
+  left: 4%;
+  width: 92%;
+  height: 92%;
+}
+.friend-art .friend-img { object-fit: contain; }
+.friend-art .friend-tint { /* fills the friend with its colour once it is finished */
+  display: none;
+  background: linear-gradient(rgba(255, 252, 244, 0.18), rgba(255, 252, 244, 0.18)), var(--fc);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.friend-card.done .friend-tint { display: block; }
+.friend-card.done .friend-img { mix-blend-mode: multiply; }
+.friend-art .friend-emoji { position: relative; font-size: clamp(34px, 9vmin, 76px); line-height: 1; }
+
+.friend-name {
+  flex: none;
+  max-width: 100%;
+  font-size: clamp(13px, 2.2vmin, 19px);
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.friend-star {
+  position: absolute;
+  top: -12px;
+  right: -9px;
+  width: clamp(36px, 6.5vmin, 54px);
+  display: none;
+  transform: rotate(14deg);
+  filter: drop-shadow(0 3px 0 rgba(74, 52, 38, 0.25));
+}
+.friend-star svg { width: 100%; height: auto; }
+.friend-card.done .friend-star { display: block; }
+/* When the picker is opened from a drawing, the friend on the page is marked. */
+html[data-picker-closable="1"] .friend-card.active {
+  background: linear-gradient(rgba(255, 252, 244, 0.42), rgba(255, 252, 244, 0.42)), var(--fc);
+  box-shadow: 0 var(--press) 0 var(--ink), 0 0 0 5px var(--sun), 0 var(--press) 0 5px var(--sun);
+}
+
+/* ---------------------------------------------------------------- party */
+
+.confetti {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti i {
+  position: absolute;
+  top: -26px;
+  width: 12px;
+  height: 18px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  transform: rotate(var(--tilt, 0deg));
+  animation: confetti-fall 3s linear forwards;
+}
+@keyframes confetti-fall {
+  to { transform: translateY(calc(var(--vh) + 60px)) rotate(calc(var(--tilt, 0deg) + 560deg)); }
+}
+
+/* Narrow desktop windows: smaller brushes keep room for the teacher's words. */
+@media (min-aspect-ratio: 21/20) and (max-width: 1000px) {
+  .brushes { grid-template-columns: repeat(4, 50px); }
+  .helper { width: 92px; }
+  .bubble-text { font-size: 13.5px; }
+}
+
+/* Roomier desks get a longer crayon box. */
+@media (min-aspect-ratio: 21/20) and (min-width: 1180px) and (min-height: 700px) {
+  :root { --rail: 200px; }
+  .bubble-text { font-size: 16.5px; }
+}
+@media (min-aspect-ratio: 21/20) and (min-width: 1500px) and (min-height: 860px) {
+  :root { --rail: 236px; --strip: 68px; --pad: 16px; --gap: 14px; }
+  .bubble-text { font-size: 18px; }
+  .bead-dot { width: 38px; height: 38px; }
+  .bead.is-current .bead-dot { width: 52px; height: 52px; }
+}
+
+/* =========================================================================
+   Tall layout (tablet portrait): binding on top, crayon box under the paper
+     [ beads ..................... ]
+     [ paper ..................... ]
+     [ friend | teacher | helper   ]
+     [ crayons ........  | brushes ]
+   ========================================================================= */
+@media (max-aspect-ratio: 21/20) {
+  .desk {
+    --bar: 84px;
+    --toolw: 156px;
+    --tray-free: calc(
+      var(--ah) - var(--strip) - var(--edge) - 2 * var(--gap) - var(--bar) - (var(--aw) - 2 * var(--edge)) * 0.8
+    );
+    --tray: clamp(196px, var(--tray-free), 262px);
+    --cw: min(
+      calc(var(--aw) - 2 * var(--edge)),
+      calc((var(--ah) - var(--strip) - var(--edge) - 2 * var(--gap) - var(--bar) - var(--tray)) * 1.25)
+    );
+    --book-w: calc(var(--cw) + 2 * var(--edge));
+    --book-h: calc(var(--ch) + var(--strip) + var(--edge));
+
+    width: max(var(--book-w), min(var(--aw), 720px));
+    height: calc(var(--book-h) + var(--bar) + var(--tray) + 2 * var(--gap));
+    grid-template-columns: auto minmax(0, 1fr) var(--toolw);
+    grid-template-rows: var(--book-h) var(--bar) var(--tray);
+    grid-template-areas:
+      "book    book    book"
+      "friend  bubble  helper"
+      "crayons crayons brushes";
+  }
+
+  .book {
+    justify-self: center;
+    width: var(--book-w);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--strip) minmax(0, 1fr);
+    padding: 0 var(--edge) var(--edge);
+  }
+  .binding::before {
+    top: 6px;
+    right: 20px;
+    bottom: auto;
+    left: 20px;
+    border-left: 0;
+    border-top: 2px dashed rgba(74, 52, 38, 0.28);
+  }
+  .paper { border-radius: 10px 10px 20px 20px; }
+  .paper::before {
+    top: -12px;
+    right: 22px;
+    bottom: auto;
+    left: 22px;
+    width: auto;
+    height: 22px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='22'%3E%3Ccircle cx='13' cy='17' r='3.4' fill='%234A3426'/%3E%3Crect x='10' y='1.5' width='6' height='16.500' rx='3' fill='%23FFF6E3' stroke='%234A3426' stroke-width='2'/%3E%3C/svg%3E")
+      left center / 26px 22px repeat-x;
+  }
+  .page-star { top: -6px; right: -6px; }
+
+  .step-trail { flex-direction: row; padding: 0 6px; }
+  .step-trail > * { flex: 0 1 68px; }
+
+  .friend-btn { --size: var(--tap); justify-self: start; }
+  .helper { width: auto; }
+  .bubble-text { font-size: 16px; }
+
+  .crayons {
+    --star-cs: var(--tall-cs, 1);
+    --star-rs: var(--tall-rs, 2);
+    grid-template-columns: repeat(var(--tall-cols, 6), minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .brushes {
+    align-self: stretch;
+    height: auto;
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .tool-btn svg { width: min(92%, 62px); height: min(92%, 62px); }
+
+  /* friend picker: two columns of big cards, using the whole height */
+  .picker-card { width: min(100%, 860px); height: min(100%, 1240px); }
+  .friend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .friend-grid[data-many] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .logo { align-items: center; text-align: center; }
+  .logo-main { justify-content: center; }
+}
+
+/* =========================================================================
+   Phone portrait: everything stacked
+     [ beads ]
+     [ paper ]
+     [ friend | teacher ]
+     [ crayons 5 x 4 ]
+     [ brushes | helper ]
+   ========================================================================= */
+@media (max-aspect-ratio: 21/20) and (max-width: 700px) {
+  :root {
+    --pad: 8px;
+    --gap: 8px;
+    --edge: 4px;
+    --strip: 48px;
+    --press: 4px;
+  }
+  .desk {
+    --bar: 84px;
+    --bub: 76px;
+    --cray-free: calc(
+      var(--ah) - var(--strip) - var(--edge) - 3 * var(--gap) - var(--bar) - var(--bub) - (var(--aw) - 2 * var(--edge)) * 0.8
+    );
+    --cray: clamp(196px, var(--cray-free), 292px);
+    --cw: min(
+      calc(var(--aw) - 2 * var(--edge)),
+      calc((var(--ah) - var(--strip) - var(--edge) - 3 * var(--gap) - var(--bar) - var(--bub) - var(--cray)) * 1.25)
+    );
+
+    width: var(--aw);
+    height: calc(var(--book-h) + var(--bub) + var(--cray) + var(--bar) + 3 * var(--gap));
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: var(--book-h) var(--bub) var(--cray) var(--bar);
+    grid-template-areas:
+      "book    book    book"
+      "friend  bubble  bubble"
+      "crayons crayons crayons"
+      "brushes brushes helper";
+  }
+
+  .book { border-radius: 20px; }
+  .paper { border-radius: 8px 8px 15px 15px; }
+  .paper::before { right: 16px; left: 16px; }
+  .step-trail > * { flex: 0 1 44px; }
+  .bead-dot { width: 24px; height: 24px; }
+  .bead.is-current .bead-dot { width: 34px; height: 34px; box-shadow: 0 0 0 3px var(--sun); }
+  .trail-chip svg { width: 32px; height: 32px; padding: 4px; }
+  .trail-chip.is-button svg { width: 36px; height: 36px; padding: 3px; border-radius: 12px; }
+
+  .friend-btn { --size: calc(var(--bub) - var(--press)); }
+  .friend-swap { width: 26px; height: 26px; right: -5px; bottom: -4px; border-radius: 9px; }
+  .bubble {
+    height: calc(var(--bub) - var(--press));
+    border-radius: 24px;
+    gap: 9px;
+    padding: 0 12px 0 6px;
+  }
+  .voice-btn { --size: 50px; margin-top: -2px; }
+  .bubble-text { font-size: 12.5px; line-height: 1.18; -webkit-line-clamp: 4; }
+
+  .crayons {
+    --star-cs: var(--phone-cs, 2);
+    --star-rs: var(--phone-rs, 2);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .helper { width: 84px; }
+  .helper-btn { border-radius: 22px; padding: 0 4px; }
+  .helper-next { padding: 0 2px; }
+  .helper-next svg { width: 26px; height: 26px; }
+  .next-face { width: 46px; height: 46px; }
+  .brushes {
+    align-self: start;
+    height: var(--tap);
+    gap: 4px;
+    padding: 4px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .picker-card { border-radius: 26px; }
+}
+
+/* Short phones (browser bars showing): one row fewer of crayons, six across. */
+@media (max-aspect-ratio: 21/20) and (max-width: 700px) and (max-height: 760px) {
+  .desk {
+    --bar: 70px;
+    --bub: 66px;
+    --cray: clamp(168px, var(--cray-free), 216px);
+  }
+  .crayons {
+    --star-cs: var(--short-cs, 2);
+    --star-rs: var(--short-rs, 1);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================================
+   Phone on its side (short and wide): supplies stand left and right of the paper
+     [ friend  ] [ binding | paper ] [ crayons ]
+     [ brushes ] [ teacher | helper ] [ crayons ]
+   ========================================================================= */
+@media (min-aspect-ratio: 21/20) and (max-height: 520px) {
+  :root {
+    --pad: 8px;
+    --gap: 8px;
+    --edge: 4px;
+    --strip: 46px;
+    --press: 4px;
+    --rail: 300px;
+  }
+  .desk {
+    --bar: 66px;
+    --fr: 70px;
+    --left: 76px;
+    --cw: min(
+      calc(var(--aw) - var(--left) - 2 * var(--gap) - var(--rail) - var(--strip) - var(--edge)),
+      calc((var(--ah) - 2 * var(--edge) - var(--gap) - var(--bar)) * 1.25)
+    );
+    width: calc(var(--left) + var(--book-w) + var(--rail) + 2 * var(--gap));
+    grid-template-columns: var(--left) minmax(0, 1fr) auto var(--rail);
+    grid-template-rows: var(--fr) minmax(0, 1fr) var(--bar);
+    grid-template-areas:
+      "friend  book   book   crayons"
+      "brushes book   book   crayons"
+      "brushes bubble helper crayons";
+  }
+  .book { border-radius: 20px; }
+  .paper { border-radius: 8px 15px 15px 8px; }
+  .step-trail { padding: 2px 0; }
+  .bead-dot { width: 20px; height: 20px; border-width: 2.5px; }
+  .bead.is-current .bead-dot { width: 28px; height: 28px; box-shadow: 0 0 0 3px var(--sun); }
+  .trail-chip svg { width: 28px; height: 28px; padding: 3px; }
+  .trail-chip.is-button svg { width: 30px; height: 30px; padding: 2px; border-radius: 10px; }
+
+  .bubble { border-radius: 22px; gap: 8px; padding: 0 12px 0 6px; }
+  .voice-btn { --size: 46px; margin-top: -2px; }
+  .bubble-text { font-size: 12.5px; line-height: 1.18; -webkit-line-clamp: 3; }
+  .helper { width: 84px; }
+  .helper-btn { border-radius: 20px; padding: 0 4px; }
+  .helper-next { padding: 0 2px; }
+  .helper-next svg { width: 26px; height: 26px; }
+  .next-face { width: 44px; height: 44px; }
+
+  .brushes {
+    align-self: stretch;
+    height: auto;
+    gap: 4px;
+    padding: 4px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
+  .crayons {
+    --star-cs: var(--land-cs, 4);
+    --star-rs: var(--land-rs, 1);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px 5px;
+    padding: 5px;
+  }
+  .picker-card { border-radius: 24px; padding-top: 8px; padding-bottom: 10px; gap: 6px; }
+  .picker-head { gap: 10px; }
+  .logo { flex-direction: row; align-items: center; gap: 12px; }
+  .logo-main { font-size: clamp(24px, 9vmin, 40px); }
+  .round-btn { width: 52px; height: 52px; }
+  .friend-card { flex-direction: row; gap: 6px; padding: 4px 8px; border-radius: 18px; }
+  .friend-art { flex: 0 0 44%; height: 100%; }
+  .friend-name { flex: 1; min-width: 0; text-align: left; white-space: normal; font-size: 13px; }
+}
+@media (min-aspect-ratio: 21/20) and (max-height: 520px) and (max-width: 780px) {
+  :root { --rail: 226px; }
+  .crayons {
+    --star-cs: var(--land3-cs, 2);
+    --star-rs: var(--land3-rs, 1);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
