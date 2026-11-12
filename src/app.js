@@ -5,10 +5,8 @@ import { CHARACTER_LESSONS, SWATCH_PALETTE } from './characters.js';
 import { createAudioSystem } from './audio.js';
 import {
   createSketchbookUI,
-  paintFinishStar,
   paintLabelPill,
   paintPaper,
-  paintStartDot,
   paintTeacherPencil,
 } from './ui.js';
 
@@ -18,7 +16,7 @@ const CANVAS_H = 640;
 
 const SUBTITLE_TEXTS = {
   welcome: 'Welcome to Smiling Critters Drawing & Coloring School! Pick a friend to draw step by step!',
-  draw_step_1: 'Drawing Step 1/6: Trace from the GREEN DOT to draw the big round head!',
+  draw_step_1: 'Drawing Step 1/6: Watch the pencil slowly draw the big round head, or trace along!',
   draw_step_2: 'Drawing Step 2/6: Awesome! Now trace the cute ears on top of the head!',
   draw_step_3: 'Drawing Step 3/6: Draw the two big expressive eyes and cute nose!',
   draw_step_4: 'Drawing Step 4/6: Draw a giant happy Smiling Critter grin and tongue!',
@@ -94,11 +92,71 @@ export function initDrawingSchoolApp() {
     'magic_pendant',
   ];
   const partCanvases = {};
+  const partFilledColors = {};
   for (const pid of partOrder) {
     const c = document.createElement('canvas');
     c.width = CANVAS_W;
     c.height = CANVAS_H;
     partCanvases[pid] = c;
+  }
+
+  // Pixel-locked 800x640 colored reference canvases built from assets/colored/*_colored.png
+  const coloredFillCanvases = {};
+  const coloredFillLoading = {};
+  const sameHexColor = (a, b) =>
+    Boolean(a && b && String(a).trim().toUpperCase() === String(b).trim().toUpperCase());
+
+  function ensureColoredFillCanvas(lesson) {
+    if (!lesson || !lesson.coloredArt || !lesson.coloredRect) return null;
+    if (coloredFillCanvases[lesson.id]) return coloredFillCanvases[lesson.id];
+    if (!coloredFillLoading[lesson.id]) {
+      coloredFillLoading[lesson.id] = true;
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = CANVAS_W;
+        c.height = CANVAS_H;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.fillStyle = '#FFFFFF';
+        g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        const { dx, dy, dw, dh } = lesson.coloredRect;
+        g.drawImage(img, dx, dy, dw, dh);
+        // Dilate bright region colors 3px into dark outline pixels (using snapshot per pass so it never cascades!)
+        const id = g.getImageData(0, 0, CANVAS_W, CANVAS_H);
+        const d = id.data;
+        for (let pass = 0; pass < 3; pass++) {
+          const src = new Uint8ClampedArray(d);
+          for (let y = 1; y < CANVAS_H - 1; y++) {
+            for (let x = 1; x < CANVAS_W - 1; x++) {
+              const o = (y * CANVAS_W + x) * 4;
+              if (src[o] + src[o + 1] + src[o + 2] < 180) {
+                const nbs = [o - 4, o + 4, o - CANVAS_W * 4, o + CANVAS_W * 4];
+                for (let k = 0; k < 4; k++) {
+                  const nb = nbs[k];
+                  if (src[nb] + src[nb + 1] + src[nb + 2] >= 180) {
+                    d[o] = src[nb];
+                    d[o + 1] = src[nb + 1];
+                    d[o + 2] = src[nb + 2];
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        g.putImageData(id, 0, 0);
+        coloredFillCanvases[lesson.id] = c;
+        // Refresh any already-filled part layers for this character
+        if (state.characterId === lesson.id) {
+          for (const pid of Object.keys(partFilledColors)) {
+            fillPartCanvasSolid(pid, partFilledColors[pid]);
+          }
+        }
+      };
+      img.src = lesson.coloredArt;
+    }
+    return null;
   }
 
   const state = {
@@ -109,15 +167,16 @@ export function initDrawingSchoolApp() {
     strokeProgress: 0, // 0..1 on current sub-stroke
     colorStepIndex: 0, // 0..6
     colorCoverage: 0, // 0..100 for current coloring step
-    selectedColor: '#9B5DE5',
+    selectedColor: '#944EE8',
     selectedTool: 'crayon', // 'crayon' | 'marker' | 'watercolor' | 'glitter'
     completedCharacters: [],
     stickers: [],
     sparkles: [],
     teacherPhase: 0,
-    teacherHoldTimer: 1.0,
+    teacherHoldTimer: 0.45,
+    strokeEndTimer: 0,
     teacherDemoDone: false,
-    teacherSpeedPxPerSec: 28, // 5-year-old slow hand speed (~28 px/sec, min 12s per stroke)
+    teacherSpeedPxPerSec: 28, // 5-year-old slow hand speed (~28 px/sec)
     lastFrameMs: 0,
     lastPointerMs: 0,
     danceTime: 0,
@@ -164,7 +223,8 @@ export function initDrawingSchoolApp() {
 
   function resetTeacherDemo() {
     state.teacherPhase = 0;
-    state.teacherHoldTimer = 1.0;
+    state.teacherHoldTimer = 0.45;
+    state.strokeEndTimer = 0;
     state.teacherDemoDone = false;
   }
 
@@ -207,6 +267,7 @@ export function initDrawingSchoolApp() {
       nc.width = CANVAS_W;
       nc.height = CANVAS_H;
       partCanvases[pid] = nc;
+      delete partFilledColors[pid];
     }
     state.stickers = [];
     state.sparkles = [];
@@ -236,6 +297,7 @@ export function initDrawingSchoolApp() {
 
   function selectCharacter(charId, quiet = false) {
     const found = CHARACTER_LESSONS.find((c) => c.id === charId) || CHARACTER_LESSONS[0];
+    ensureColoredFillCanvas(found);
     state.characterId = found.id;
     state.phase = 'drawing';
     state.drawStepIndex = 0;
@@ -309,11 +371,17 @@ export function initDrawingSchoolApp() {
     const lesson = getLesson();
     const pCanvas = partCanvases[partId];
     if (!pCanvas) return;
+    partFilledColors[partId] = colorHex;
     const pCtx = pCanvas.getContext('2d');
     pCtx.save();
     pCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     buildPartClipPath(pCtx, lesson, partId);
     pCtx.clip('evenodd');
+
+    const stepSpec = lesson.colorSteps?.find((s) => s.partId === partId);
+    const useOfficialArt =
+      !colorHex || !stepSpec || sameHexColor(colorHex, stepSpec.recommendedColor);
+    const officialCanvas = ensureColoredFillCanvas(lesson);
 
     if (partId === 'background_frame') {
       const grad = pCtx.createLinearGradient(0, 0, 0, CANVAS_H);
@@ -330,8 +398,10 @@ export function initDrawingSchoolApp() {
         { x: 706, y: 504, emoji: '✨' },
       ];
     } else if (partId === 'shading_sparkles') {
-      pCtx.fillStyle = colorHex;
+      pCtx.fillStyle = colorHex || '#16131C';
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    } else if (useOfficialArt && officialCanvas) {
+      pCtx.drawImage(officialCanvas, 0, 0);
     } else {
       pCtx.fillStyle = colorHex;
       pCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -380,17 +450,18 @@ export function initDrawingSchoolApp() {
     }
   }
 
-  function paintBrushDab(x, y) {
+  function paintBrushDab(x, y, isAuto = false) {
     const lesson = getLesson();
     const cs = lesson.colorSteps[state.colorStepIndex];
     if (!cs) return;
     const pCanvas = partCanvases[cs.partId];
     if (!pCanvas) return;
 
-    // Require at least 18px of real finger/brush movement between counted dabs so a wiggle never skips a coloring step!
+    // Require real movement between counted dabs so a wiggle never skips a coloring step!
+    const minHop = isAuto ? 10 : 18;
     if (state.lastDabPt) {
       const dabDist = Math.hypot(x - state.lastDabPt.x, y - state.lastDabPt.y);
-      if (dabDist < 18) return;
+      if (dabDist < minHop) return;
     }
     state.lastDabPt = { x, y };
 
@@ -401,7 +472,19 @@ export function initDrawingSchoolApp() {
     pCtx.clip('evenodd');
 
     const color = state.selectedColor || cs.recommendedColor;
-    if (state.selectedTool === 'crayon') {
+    const officialCanvas = ensureColoredFillCanvas(lesson);
+    const useOfficialArt =
+      officialCanvas &&
+      cs.partId !== 'background_frame' &&
+      cs.partId !== 'shading_sparkles' &&
+      sameHexColor(color, cs.recommendedColor);
+
+    if (useOfficialArt) {
+      pCtx.beginPath();
+      pCtx.arc(x, y, brushRadius(state.selectedTool, cs.partId) + 6, 0, Math.PI * 2);
+      pCtx.clip();
+      pCtx.drawImage(officialCanvas, 0, 0);
+    } else if (state.selectedTool === 'crayon') {
       pCtx.fillStyle = color;
       pCtx.globalAlpha = 0.85;
       for (let i = 0; i < 9; i++) {
@@ -676,60 +759,60 @@ export function initDrawingSchoolApp() {
     state.lastFrameMs = ts;
 
     const lesson = getLesson();
-
-    // True 5-year-old child slow demonstration speed (~28 px/sec along true pixel arc-length, min 12.0s pass!)
-    const childActive = state.pointerDown ||
-      (state.phase === 'drawing' && state.strokeProgress > 0) ||
-      (state.phase === 'coloring' && state.colorCoverage > 0);
-    if (childActive) {
-      state.teacherDemoDone = true;
-    } else if (!state.teacherDemoDone) {
-      if (state.teacherHoldTimer > 0) {
-        state.teacherHoldTimer = Math.max(0, state.teacherHoldTimer - dt);
-      } else {
-        let demoDurationSec = 14.0;
-        if (state.phase === 'drawing') {
-          const ds = lesson.drawSteps[state.drawStepIndex];
-          const activePts = ds?.strokes?.[state.strokeSubIndex];
-          const arcPx = getPolylineTotalLength(activePts);
-          // 28 px/sec along true Euclidean arc-length (756.9px head takes 27.07s; tiny 9px sun rays take 3.5s)
-          demoDurationSec = Math.max(3.5, arcPx / Math.max(15, state.teacherSpeedPxPerSec));
-        } else if (state.phase === 'coloring') {
-          demoDurationSec = 10.0;
-        }
-        state.teacherPhase += dt / demoDurationSec;
-        if (state.teacherPhase >= 1.0) {
-          state.teacherPhase = 1.0;
-          state.teacherDemoDone = true;
-        }
-      }
-    }
+    ensureColoredFillCanvas(lesson);
     state.danceTime += dt;
 
-    // Child ink follows the finger's traced target at a steady 5-year-old pace (<= 38 px/s).
+    // Automatic slow 5-year-old pencil glides across each stroke (~28 px/sec along true pixel arc-length)
+    // and advances automatically, while also allowing the child to trace along with their finger!
     if (state.phase === 'drawing') {
       const dsA = lesson.drawSteps[state.drawStepIndex];
       const ptsA = dsA?.strokes?.[state.strokeSubIndex];
       const totalA = getPolylineTotalLength(ptsA);
       if (totalA > 0) {
-        const tipA = state.strokeProgress * totalA;
-        if (state.strokeTargetDist > tipA + 0.01) {
-          const nextA = Math.min(state.strokeTargetDist, tipA + 38 * dt);
-          state.strokeProgress = Math.min(1, nextA / totalA);
+        if (state.teacherHoldTimer > 0 && !state.pointerDown && state.strokeTargetDist <= 0) {
+          state.teacherHoldTimer = Math.max(0, state.teacherHoldTimer - dt);
+        } else {
+          const autoSpeed = Math.max(15, state.teacherSpeedPxPerSec);
+          const minStepSec = 2.6;
+          const effAutoSpeed = Math.min(autoSpeed, totalA / minStepSec);
+          const autoNextDist = state.strokeProgress * totalA + effAutoSpeed * dt;
+          const fingerNextDist =
+            state.strokeTargetDist > state.strokeProgress * totalA + 0.01
+              ? Math.min(state.strokeTargetDist, state.strokeProgress * totalA + 38 * dt)
+              : 0;
+          const nextDist = Math.max(autoNextDist, fingerNextDist);
+          state.strokeProgress = Math.min(1, nextDist / totalA);
+          state.teacherPhase = state.strokeProgress;
+
           const meterFill = document.getElementById('step-meter-fill');
           const meterLabel = document.getElementById('step-meter-label');
-          const pctA = Math.min(100, Math.round(((state.strokeSubIndex + state.strokeProgress) / dsA.strokes.length) * 100));
+          const pctA = Math.min(
+            100,
+            Math.round(((state.strokeSubIndex + state.strokeProgress) / dsA.strokes.length) * 100)
+          );
           if (meterFill) meterFill.style.width = `${pctA}%`;
           if (meterLabel) meterLabel.textContent = `${pctA}% Traced`;
-          if (Math.random() < 0.06) {
+          if (state.strokeProgress < 0.995 && Math.random() < 0.04) {
             const sparkA = samplePointOnPolyline(ptsA, state.strokeProgress);
-            audio.playTraceTick();
-            spawnSparkles(sparkA[0], sparkA[1], '#FFD43B', 2);
+            spawnSparkles(sparkA[0], sparkA[1], '#FFD43B', 1);
           }
-          if (state.strokeProgress >= 0.985) {
-            state.pointerDown = false;
-            advanceDrawingSubStroke();
+          if (state.strokeProgress >= 0.995) {
+            state.strokeProgress = 1;
+            state.strokeEndTimer = (state.strokeEndTimer || 0) + dt;
+            if (state.strokeEndTimer >= 0.35 || state.pointerDown) {
+              state.pointerDown = false;
+              state.strokeEndTimer = 0;
+              advanceDrawingSubStroke();
+            }
           }
+        }
+      }
+    } else if (state.phase === 'coloring') {
+      if (!state.pointerDown) {
+        if (state.teacherHoldTimer > 0) {
+          state.teacherHoldTimer = Math.max(0, state.teacherHoldTimer - dt);
+        } else {
+          state.teacherPhase = Math.min(1.0, state.teacherPhase + dt / 9.5);
         }
       }
     }
@@ -835,56 +918,28 @@ export function initDrawingSchoolApp() {
             dash: [10, 10],
           });
         }
-        // Active sub-stroke guide path + traced portion + teacher pencil
+        // Active sub-stroke guide path + automatically drawn ink + slow teacher pencil (no green start icon!)
         const activePts = ds.strokes[state.strokeSubIndex];
         if (activePts && activePts.length >= 2) {
           drawStrokePolyline(ctx, activePts, 1.0, {
-            color: 'rgba(112, 72, 232, 0.50)',
-            width: inkWidth + 3.5,
-            dash: [16, 12],
+            color: 'rgba(112, 72, 232, 0.36)',
+            width: inkWidth + 2.5,
+            dash: [14, 12],
             dashOffset: 0,
           });
-
-          // During the ONE-TIME steady 5-year-old slow demonstration pass (28 px/sec, linear along true arc-length), show a soft preview trail
-          const linearDemoT = Math.max(0, Math.min(1, state.teacherPhase));
-          if (!state.teacherDemoDone && state.strokeProgress === 0) {
-            drawStrokePolyline(ctx, activePts, linearDemoT, {
-              color: 'rgba(255, 146, 43, 0.45)',
-              width: inkWidth + 2,
-            });
-          }
 
           drawStrokePolyline(ctx, activePts, state.strokeProgress, {
             color: '#231B18',
             width: inkWidth + 0.6,
           });
 
-          let startPt = activePts[0];
-          if (state.strokeProgress > 0) {
-            const cumA = getPolylineArcLengths(activePts);
-            const tipDist = state.strokeProgress * (cumA[cumA.length - 1] || 0);
-            for (let k = 1; k < activePts.length; k++) {
-              if (activePts[k][2] && Math.abs(tipDist - cumA[k]) <= 2.5) {
-                startPt = activePts[k];
-                break;
-              }
-            }
-          }
-          const endPt = activePts[activePts.length - 1];
-
-          // Gold FINISH star drawn first so Green START dot always sits on top on closed loops
-          paintFinishStar(ctx, endPt[0], endPt[1]);
-          paintStartDot(ctx, startPt[0], startPt[1]);
-
-          // Teacher pencil: glides at constant 5-year-old speed (28 px/sec) ONCE during !teacherDemoDone, then parks calmly at child's stroke tip (or START)
-          const pencilRatio = !state.teacherDemoDone ? linearDemoT : state.strokeProgress;
-          const pencilPt = samplePointOnPolyline(activePts, pencilRatio);
+          const pencilPt = samplePointOnPolyline(activePts, state.strokeProgress);
           renderTeacherPencil(ctx, pencilPt[0], pencilPt[1]);
         }
       }
     }
 
-    // 5. If in Coloring Phase, draw a friendly floating pointer pill AND a slow 1-pass coloring teacher demonstration
+    // 5. If in Coloring Phase, draw a friendly floating pointer pill AND automatic slow crayon coloring
     if (state.phase === 'coloring') {
       const cs = lesson.colorSteps[state.colorStepIndex];
       if (cs) {
@@ -894,12 +949,12 @@ export function initDrawingSchoolApp() {
         const bobY = Math.sin(state.danceTime * 1.4) * 2.0;
         paintLabelPill(ctx, pillX, pillY - 37 + bobY, target.label);
 
-        if (!state.teacherDemoDone && state.colorCoverage === 0) {
+        if (!state.pointerDown) {
           const demoT = Math.max(0, Math.min(1, state.teacherPhase));
           const partCells = getCoverageGrid(cs.partId);
           let demoWaypoints = [];
           if (partCells.length >= 6) {
-            const wpCount = 7;
+            const wpCount = 14;
             for (let w = 0; w < wpCount; w++) {
               const idx = Math.min(
                 partCells.length - 1,
@@ -915,16 +970,18 @@ export function initDrawingSchoolApp() {
               [target.x + 20, target.y + 10],
             ];
           }
-          ctx.save();
-          buildPartClipPath(ctx, lesson, cs.partId);
-          ctx.clip('evenodd');
-          drawStrokePolyline(ctx, demoWaypoints, demoT, {
-            color: cs.recommendedColor || state.selectedColor || '#FFD43B',
-            width: 24,
-          });
-          ctx.restore();
           const sweepPt = samplePointOnPolyline(demoWaypoints, demoT);
-          renderTeacherPencil(ctx, sweepPt[0], sweepPt[1]);
+          if (state.teacherHoldTimer <= 0 && demoT > 0) {
+            paintBrushDab(sweepPt[0], sweepPt[1], true);
+          }
+          if (state.phase === 'coloring') {
+            renderTeacherPencil(ctx, sweepPt[0], sweepPt[1]);
+            if (demoT >= 0.995) {
+              advanceColoringStep();
+            }
+          }
+        } else if (state.lastPt) {
+          renderTeacherPencil(ctx, state.lastPt.x, state.lastPt.y);
         }
       }
     }

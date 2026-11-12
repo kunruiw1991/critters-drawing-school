@@ -810,8 +810,8 @@ html[data-picker-closable="1"] #btn-cover-voice { display: none; }
   -webkit-mask-size: contain;
   mask-size: contain;
 }
-.friend-card.done .friend-tint { display: block; }
-.friend-card.done .friend-img { mix-blend-mode: multiply; }
+.friend-card.done .friend-tint { display: none; }
+.friend-card.done .friend-img { mix-blend-mode: normal; }
 .friend-art .friend-emoji { position: relative; font-size: clamp(34px, 9vmin, 76px); line-height: 1; }
 
 .friend-name {
